@@ -2,30 +2,35 @@
 #include <iostream>
 #include <cassert>
 
+const double eps = 1e-10;
+
 namespace TMD {
 
-Negative* Negative::GetNegativeExpression(Expression *child) {
-	return new Negative(child->_rows, child->_cols, child->_has_variable, child->_has_differential, child);
+void SingleOpExpression::MarkVariable(unsigned int uuid) {
+	_child->MarkVariable(uuid);
+	_has_variable = _child->_has_variable;
 }
 
-void Negative::Print(std::ostream &out) const {
+Negate* Negate::GetNegateExpression(Expression *child) {
+	return new Negate(child->_rows, child->_cols, child->_has_variable, child->_has_differential, child);
+}
+
+void Negate::Print(std::ostream &out) const {
 	out << "-\\left\\( ";
 	_child->Print(out);
 	out << "\\right\\)";
 }
 
-Expression* Negative::Clone() const {
-	return GetNegativeExpression(_child->Clone());
+Expression* Negate::Clone() const {
+	return GetNegateExpression(_child->Clone());
 }
 
-Expression* Negative::Differentiate() {
-	_child = _child->Differentiate();
-	return this;
+Expression* Negate::Differentiate() const {
+	return GetNegateExpression(_child->Differentiate());
 }
 
-Expression* Negative::Vectorize() {
-	_child = _child->Vectorize();
-	return this;
+Expression* Negate::Vectorize() const {
+	return GetNegateExpression(_child->Vectorize());
 }
 
 void Inverse::Print(std::ostream &out) const {
@@ -43,39 +48,487 @@ Expression* Inverse::Clone() const {
 	return GetInverseExpression(_child->Clone());
 }
 
-Expression* Inverse::Differentiate() {
-	auto child_copy1 = _child->Clone();
-	auto child_copy2 = _child->Clone();
-	auto inv_child_copy1 = GetInverseExpression(child_copy1);
-	auto inv_child_copy2 = GetInverseExpression(child_copy2);
-	auto neg_inv_child_copy1 = Negative::GetNegativeExpression(inv_child_copy1);
-	auto mult1 = MatrixMultiplication::GetMatrixMultiplicationExpression(neg_inv_child_copy1, _child->Differentiate());
-	auto result = MatrixMultiplication::GetMatrixMultiplicationExpression(mult1, inv_child_copy2);
+Expression* Inverse::Differentiate() const {
+	auto inv_child1 = GetInverseExpression(_child->Clone());
+	auto inv_child2 = GetInverseExpression(_child->Clone());
+	auto neg_inv_child1 = Negate::GetNegateExpression(inv_child1);
+	auto mult1 = MatrixProduct::GetMatrixProductExpression(neg_inv_child1, _child->Differentiate());
+	auto result = MatrixProduct::GetMatrixProductExpression(mult1, inv_child2);
 	return result;
 }
 
-Expression* Inverse::Vectorize() {
+Expression* Inverse::Vectorize() const {
 	throw std::logic_error("vectorizing the inverse");
 }
 
-MatrixDeterminant* MatrixDeterminant::GetMatrixDeterminantExpression(Expression *child) {
-	return new MatrixDeterminant(
+Determinant* Determinant::GetMatrixDeterminantExpression(Expression *child) {
+	assert(child->_rows == child->_cols);
+	return new Determinant(
 		1, 1, child->_has_variable, child->_has_differential, child
 	);
 }
 
+void Determinant::Print(std::ostream &out) const {
+	out << "\\det \\left(";
+	_child->Print(out);
+	out << "\\right)";
+}
 
+Expression * Determinant::Clone() const {
+	return GetMatrixDeterminantExpression(_child->Clone());
+}
 
-MatrixMultiplication* MatrixMultiplication::GetMatrixMultiplicationExpression(
+Expression * Determinant::Differentiate() const {
+	auto det_A = GetMatrixDeterminantExpression(_child->Clone());
+	auto inv_A = Inverse::GetInverseExpression(_child->Clone());
+	auto vec_inv_A = Vectorization::GetVectorizationExpression(inv_A);
+	auto trans_vec_inv_A = Transpose::GetTransposeExpression(vec_inv_A);
+	auto vec_diff_A = Vectorization::GetVectorizationExpression(_child->Differentiate());
+	auto mult1 = MatrixProduct::GetMatrixProductExpression(trans_vec_inv_A, vec_diff_A);
+	auto result = ScalarMatrixProduct::GetScalarMatrixProduct(det_A, mult1);
+	return result;
+}
+
+Expression * Determinant::Vectorize() const {
+	throw std::logic_error("vecorizing the determinant");
+}
+
+Vectorization* Vectorization::GetVectorizationExpression(Expression *child) {
+	return new Vectorization(
+		child->_rows * child->_cols, 1, child->_has_variable, child->_has_differential, child
+	);
+}
+
+void Vectorization::Print(std::ostream &out) const {
+	out << "vec \\left(";
+	_child->Print(out);
+	out << "\\right)";
+}
+
+Expression* Vectorization::Clone() const {
+	return GetVectorizationExpression(_child->Clone());
+}
+
+Expression* Vectorization::Differentiate() const {
+	return GetVectorizationExpression(_child->Differentiate());
+}
+
+Expression* Vectorization::Vectorize() const {
+	return _child->Vectorize();
+}
+
+Transpose* Transpose::GetTransposeExpression(Expression *child) {
+	return new Transpose(
+		child->_cols, child->_rows, child->_has_variable, child->_has_differential, child
+	);
+}
+
+void Transpose::Print(std::ostream &out) const {
+	out << "\\left(";
+	_child->Print(out);
+	out << "\\right)^T";
+}
+
+Expression * Transpose::Clone() const {
+	return GetTransposeExpression(_child->Clone());
+}
+
+Expression * Transpose::Differentiate() const {
+	return GetTransposeExpression(_child->Differentiate());
+}
+
+Expression * Transpose::Vectorize() const {
+	auto K = CommutationMatrix::GetCommutationMatrix(_child->_rows, _child->_cols);
+	auto vec_child = _child->Vectorize();
+	return MatrixProduct::GetMatrixProductExpression(K, vec_child);
+}
+
+ScalarPower* ScalarPower::GetScalarPowerExpression(Expression *child, double power) {
+	assert(child->_rows == 1 && child->_cols == 1);
+	return new ScalarPower(
+		1, 1,
+		child->_has_variable,
+		child->_has_differential,
+		child, power
+	);
+}
+
+void ScalarPower::Print(std::ostream &out) const {
+	out << "\\left(";
+	_child->Print(out);
+	out << "\\right)^" << _power;
+}
+
+Expression * ScalarPower::Clone() const {
+	return GetScalarPowerExpression(_child->Clone(), _power);
+}
+
+Expression * ScalarPower::Differentiate() const {
+	auto power = ScalarConstant::GetScalarConstant(_power);
+	Expression* mult;
+	if (std::abs(_power - 1) < eps) {
+		mult  = _child->Differentiate();
+	} else {
+		auto child_power_m_1 = GetScalarPowerExpression(_child->Clone(), _power - 1);
+		mult = ScalarMatrixProduct::GetScalarMatrixProduct(child_power_m_1, _child->Differentiate());
+	}
+	return ScalarMatrixProduct::GetScalarMatrixProduct(power, mult);
+}
+
+Expression * ScalarPower::Vectorize() const {
+	throw std::logic_error("vectorizing the scalar power");
+}
+
+void DoubleOpExpression::MarkVariable(unsigned int uuid) {
+	_lhs->MarkVariable(uuid);
+	_rhs->MarkVariable(uuid);
+	_has_variable = (_lhs->_has_variable || _rhs->_has_variable);
+}
+
+MatrixAddition* MatrixAddition::GetMatrixAdditionExpression(Expression *lhs, Expression *rhs) {
+	if (lhs->_rows != rhs->_rows || lhs->_cols != rhs->_cols) {
+		throw std::logic_error("adding matrix of different shape");
+	}
+	return new MatrixAddition(
+		lhs->_rows, lhs->_cols,
+		lhs->_has_variable || rhs->_has_variable,
+		lhs->_has_differential || rhs->_has_differential,
+		lhs, rhs
+	);
+}
+
+void MatrixAddition::Print(std::ostream &out) const {
+	out << "\\left(";
+	_lhs->Print(out);
+	out << "\\right) + \\left(";
+	_rhs->Print(out);
+	out << "\\right)";
+}
+
+Expression* MatrixAddition::Clone() const {
+	return GetMatrixAdditionExpression(_lhs->Clone(), _rhs->Clone());
+}
+
+Expression* MatrixAddition::Differentiate() const {
+	return GetMatrixAdditionExpression(_lhs->Differentiate(), _rhs->Differentiate());
+}
+
+Expression* MatrixAddition::Vectorize() const {
+	return GetMatrixAdditionExpression(_lhs->Vectorize(), _rhs->Vectorize());
+}
+
+MatrixProduct* MatrixProduct::GetMatrixProductExpression(
 	Expression *lhs, Expression *rhs
 ) {
 	assert(lhs->_cols == rhs->_rows);
-	return new MatrixMultiplication(
+	return new MatrixProduct(
 		lhs->_rows, rhs->_cols,
 		lhs->_has_variable || rhs->_has_variable,
 		lhs->_has_differential || rhs->_has_differential,
 		lhs, rhs
 	);
+}
+
+void MatrixProduct::Print(std::ostream &out) const {
+	out << "\\left(";
+	_lhs->Print(out);
+	out << "\\right) \\left(";
+	_rhs->Print(out);
+	out << "\\right)";
+}
+
+Expression * MatrixProduct::Clone() const {
+	return GetMatrixProductExpression(_lhs->Clone(), _rhs->Clone());
+}
+
+Expression * MatrixProduct::Differentiate() const {
+	if (_lhs->_has_variable && !_rhs->_has_variable) {
+		return GetMatrixProductExpression(_lhs->Differentiate(), _rhs->Clone());
+	}
+	if (_rhs->_has_variable && !_lhs->_has_variable) {
+		return GetMatrixProductExpression(_lhs->Clone(), _rhs->Differentiate());
+	}
+	if (_lhs->_has_variable && _rhs->_has_variable) {
+		return MatrixAddition::GetMatrixAdditionExpression(
+			GetMatrixProductExpression(_lhs->Differentiate(), _rhs->Clone()),
+			GetMatrixProductExpression(_lhs->Clone(), _rhs->Differentiate())
+		);
+	}
+	throw std::logic_error("differentiating a matrix product with no varaible");
+}
+
+Expression * MatrixProduct::Vectorize() const {
+	// A * B
+	if (_lhs->_has_differential && _rhs->_has_differential) {
+		throw std::logic_error("differential appears on both sides of matrix product");
+	}
+	if (_lhs->_has_differential && !_rhs->_has_differential) {
+		auto BT = Transpose::GetTransposeExpression(_rhs->Clone());
+		auto BTKronI = KroneckerProduct::GetKroneckerProduct(
+			BT, IdentityMatrix::GetIdentityMatrix(_lhs->_rows)
+		);
+		return MatrixProduct::GetMatrixProductExpression(
+			BTKronI, _lhs->Vectorize()
+		);
+	}
+	if (!_lhs->_has_differential && _rhs->_has_differential) {
+		auto IKronA = KroneckerProduct::GetKroneckerProduct(
+			IdentityMatrix::GetIdentityMatrix(_rhs->_cols), _lhs->Clone()
+		);
+		return MatrixProduct::GetMatrixProductExpression(
+			IKronA, _rhs->Vectorize()
+		);
+	}
+	throw std::logic_error("vectorizing a matrix product without differentials");
+}
+
+KroneckerProduct* KroneckerProduct::GetKroneckerProduct(Expression *lhs, Expression *rhs) {
+	return new KroneckerProduct(
+		lhs->_rows * rhs->_rows,
+		lhs->_cols * rhs->_cols,
+		lhs->_has_variable || rhs->_has_variable,
+		lhs->_has_differential || rhs->_has_differential,
+		lhs, rhs
+	);
+}
+
+void KroneckerProduct::Print(std::ostream &out) const {
+	out << "\\left(";
+	_lhs->Print(out);
+	out << "\\right) \\otimes \\left(";
+	_rhs->Print(out);
+	out << "\\right)";
+}
+
+Expression * KroneckerProduct::Clone() const {
+	return GetKroneckerProduct(_lhs->Clone(), _rhs->Clone());
+}
+
+Expression * KroneckerProduct::Differentiate() const {
+	if (_lhs->_has_variable && !_rhs->_has_variable) {
+		return GetKroneckerProduct(_lhs->Differentiate(), _rhs->Clone());
+	}
+	if (_rhs->_has_variable && !_lhs->_has_variable) {
+		return GetKroneckerProduct(_lhs->Clone(), _rhs->Differentiate());
+	}
+	if (_lhs->_has_variable && _rhs->_has_variable) {
+		return MatrixAddition::GetMatrixAdditionExpression(
+			GetKroneckerProduct(_lhs->Differentiate(), _rhs->Clone()),
+			GetKroneckerProduct(_lhs->Clone(), _rhs->Differentiate())
+		);
+	}
+	throw std::logic_error("differentiating a Kronecker product with no varaible");
+}
+
+Expression * KroneckerProduct::Vectorize() const {
+	// A * B
+	if (_lhs->_has_differential && _rhs->_has_differential) {
+		throw std::logic_error("differential appears on both sides of matrix product");
+	}
+	if (!_lhs->_has_differential && _rhs->_has_differential) {
+		auto I_kron_K_kron_I = GetKroneckerProduct(
+			IdentityMatrix::GetIdentityMatrix(_lhs->_cols),
+			GetKroneckerProduct(
+				CommutationMatrix::GetCommutationMatrix(_rhs->_cols, _lhs->_rows),
+				IdentityMatrix::GetIdentityMatrix(_rhs->_rows)
+			)
+		);
+		auto vec_A_kron_I = GetKroneckerProduct(
+			Vectorization::GetVectorizationExpression(_lhs->Clone()),
+			IdentityMatrix::GetIdentityMatrix(_rhs->_rows * _rhs->_cols)
+		);
+		return MatrixProduct::GetMatrixProductExpression(
+			I_kron_K_kron_I,
+			MatrixProduct::GetMatrixProductExpression(
+				vec_A_kron_I, _rhs->Vectorize()
+			)
+		);
+	}
+	if (_lhs->_has_differential && !_rhs->_has_differential) {
+		auto K_kron_K = GetKroneckerProduct(
+			CommutationMatrix::GetCommutationMatrix(_lhs->_cols, _rhs->_cols),
+			CommutationMatrix::GetCommutationMatrix(_lhs->_rows, _rhs->_rows)
+		);
+		auto I_kron_K_kron_I = GetKroneckerProduct(
+			IdentityMatrix::GetIdentityMatrix(_rhs->_cols),
+			GetKroneckerProduct(
+				CommutationMatrix::GetCommutationMatrix(_lhs->_cols, _rhs->_rows),
+				IdentityMatrix::GetIdentityMatrix(_lhs->_rows)
+			)
+		);
+		auto vec_B_kron_I = GetKroneckerProduct(
+			Vectorization::GetVectorizationExpression(_rhs->Clone()),
+			IdentityMatrix::GetIdentityMatrix(_lhs->_rows * _lhs->_cols)
+		);
+		return MatrixProduct::GetMatrixProductExpression(
+			K_kron_K,
+			MatrixProduct::GetMatrixProductExpression(
+				I_kron_K_kron_I,
+				MatrixProduct::GetMatrixProductExpression(
+					vec_B_kron_I, _rhs->Vectorize()
+				)
+			)
+		);
+	}
+	throw std::logic_error("vectorizing a Kronecker product without differentials");
+}
+
+ScalarMatrixProduct* ScalarMatrixProduct::GetScalarMatrixProduct(
+	Expression *scalar, Expression *matrix
+) {
+	if (scalar->_rows != 1 || scalar->_cols != 1) {
+		throw std::logic_error("scalar-matrix product with non-scalar");
+	}
+	return new ScalarMatrixProduct(
+		matrix->_rows, matrix->_cols,
+		scalar->_has_variable || matrix->_has_variable,
+		scalar->_has_differential || matrix->_has_differential,
+		scalar, matrix
+	);
+}
+
+void ScalarMatrixProduct::Print(std::ostream &out) const {
+	out << "\\left(";
+	_lhs->Print(out);
+	out << "\\right)\\left(";
+	_rhs->Print(out);
+	out << "\\right)";
+}
+
+Expression * ScalarMatrixProduct::Clone() const {
+	return GetScalarMatrixProduct(_lhs->Clone(), _rhs->Clone());
+}
+
+Expression * ScalarMatrixProduct::Differentiate() const {
+	if (_lhs->_has_variable && !_rhs->_has_variable) {
+		return GetScalarMatrixProduct(_lhs->Differentiate(), _rhs->Clone());
+	}
+	if (_rhs->_has_variable && !_lhs->_has_variable) {
+		return GetScalarMatrixProduct(_lhs->Clone(), _rhs->Differentiate());
+	}
+	if (_lhs->_has_variable && _rhs->_has_variable) {
+		return MatrixAddition::GetMatrixAdditionExpression(
+			GetScalarMatrixProduct(_lhs->Differentiate(), _rhs->Clone()),
+			GetScalarMatrixProduct(_lhs->Clone(), _rhs->Differentiate())
+		);
+	}
+	throw std::logic_error("differentiating a scalar-matrix product with no varaible");
+}
+
+Expression * ScalarMatrixProduct::Vectorize() const {
+	// a * B
+	if (_lhs->_has_differential && _rhs->_has_differential) {
+		throw std::logic_error("differential appears on both sides of scalar-matrix product");
+	}
+	if (_lhs->_has_differential && !_rhs->_has_differential) {
+		auto vec_B = Vectorization::GetVectorizationExpression(_rhs->Clone());
+		return MatrixProduct::GetMatrixProductExpression(
+			vec_B, _lhs->Vectorize()
+		);
+	}
+	if (!_lhs->_has_differential && _rhs->_has_differential) {
+		return MatrixProduct::GetMatrixProductExpression(
+			_rhs->Vectorize(), _lhs->Clone()
+		);
+	}
+	throw std::logic_error("vectorizing a scalar-matrix product without differentials");
+}
+
+void LeafExpression::MarkVariable(unsigned int uuid) {
+	_has_variable = false;
+}
+
+IdentityMatrix* IdentityMatrix::GetIdentityMatrix(int order) {
+	return new IdentityMatrix(order, order, false, false, order);
+}
+
+void IdentityMatrix::Print(std::ostream &out) const {
+	out << "I_{" << _order << "}";
+}
+
+Expression * IdentityMatrix::Clone() const {
+	return GetIdentityMatrix(_order);
+}
+
+Expression * IdentityMatrix::Differentiate() const {
+	throw std::logic_error("differentiating an identity matrix");
+}
+
+Expression * IdentityMatrix::Vectorize() const {
+	throw std::logic_error("vectorizing an identity matrix");
+}
+
+Expression* CommutationMatrix::GetCommutationMatrix(int m, int n) {
+	if (m == 1 || n == 1) {
+		return IdentityMatrix::GetIdentityMatrix(m * n);
+	} else {
+		return new CommutationMatrix(
+			m * n, m * n,
+			false, false, m, n
+		);
+	}
+}
+
+void CommutationMatrix::Print(std::ostream &out) const {
+	out << "K_{" << _m << ", " << _n << "}";
+}
+
+Expression * CommutationMatrix::Clone() const {
+	return GetCommutationMatrix(_m, _n);
+}
+
+Expression * CommutationMatrix::Differentiate() const {
+	throw std::logic_error("differentiating a commutation matrix");
+}
+
+Expression * CommutationMatrix::Vectorize() const {
+	throw std::logic_error("vectorizing a commutation matrix");
+}
+
+ScalarConstant* ScalarConstant::GetScalarConstant(double value) {
+	return new ScalarConstant(1, 1, false, false, value);
+}
+
+void ScalarConstant::Print(std::ostream &out) const {
+	out << _value;
+}
+
+Expression * ScalarConstant::Clone() const {
+	return ScalarConstant::GetScalarConstant(_value);
+}
+
+Expression * ScalarConstant::Differentiate() const {
+	throw std::logic_error("differentiating a scalar constant");
+}
+
+Expression * ScalarConstant::Vectorize() const {
+	throw std::logic_error("vectorizing a scalar constant");
+}
+
+void Variable::MarkVariable(unsigned int uuid) {
+	_has_variable = (uuid == _uuid);
+}
+
+Variable* Variable::GetVariable(const std::string &name, unsigned int uuid, int rows, int cols) {
+	return new Variable(rows, cols, false, false, name, uuid);
+}
+
+void Variable::Print(std::ostream &out) const {
+	out << _name;
+}
+
+Expression * Variable::Clone() const {
+	return GetVariable(_name, _uuid, _rows, _cols);
+}
+
+Expression * Variable::Differentiate() const {
+	auto new_var = GetVariable(_name, _uuid, _rows, _cols);
+	new_var->_has_differential = true;
+	return new_var;
+}
+
+Expression * Variable::Vectorize() const {
+	// TODO:
 }
 
 }
