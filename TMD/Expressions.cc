@@ -6,9 +6,48 @@ const double eps = 1e-10;
 
 namespace TMD {
 
+Expression* GetDerivative(const Expression* expression, unsigned int variable) {
+	auto org_expr = expression->Clone();
+	org_expr->Print(std::cerr);
+	std::cerr << std::endl;
+	org_expr->MarkVariable(variable);
+	auto diffed_expr = org_expr->Differentiate();
+	diffed_expr->MarkDifferential();
+	diffed_expr->Print(std::cerr);
+	std::cerr << std::endl;
+	auto veced_expr = diffed_expr->Vectorize();
+	veced_expr->Print(std::cerr);
+	std::cerr << std::endl;
+	auto result = veced_expr->GetDerivative();
+	result->Print(std::cerr);
+	std::cerr << std::endl;
+
+	delete org_expr;
+	delete diffed_expr;
+	delete veced_expr;
+	return result;
+}
+
+Expression* Expression::GetDerivative() const {
+	throw std::logic_error("should be copying instead of getting derivative");
+}
+
 void SingleOpExpression::MarkVariable(unsigned int uuid) {
 	_child->MarkVariable(uuid);
 	_has_variable = _child->_has_variable;
+}
+
+void SingleOpExpression::MarkDifferential() {
+	_child->MarkDifferential();
+	_has_differential = _child->_has_differential;
+}
+
+SingleOpExpression::~SingleOpExpression() {
+	delete _child;
+}
+
+ExpressionType Negate::GetExpressionType() const {
+	return ExpressionType::kNegateOp;
 }
 
 Negate* Negate::GetNegateExpression(Expression *child) {
@@ -31,6 +70,10 @@ Expression* Negate::Differentiate() const {
 
 Expression* Negate::Vectorize() const {
 	return GetNegateExpression(_child->Vectorize());
+}
+
+ExpressionType Inverse::GetExpressionType() const {
+	return ExpressionType::kInverseOp;
 }
 
 void Inverse::Print(std::ostream &out) const {
@@ -59,6 +102,10 @@ Expression* Inverse::Differentiate() const {
 
 Expression* Inverse::Vectorize() const {
 	throw std::logic_error("vectorizing the inverse");
+}
+
+ExpressionType Determinant::GetExpressionType() const {
+	return ExpressionType::kDeterminantOp;
 }
 
 Determinant* Determinant::GetMatrixDeterminantExpression(Expression *child) {
@@ -93,6 +140,10 @@ Expression * Determinant::Vectorize() const {
 	throw std::logic_error("vecorizing the determinant");
 }
 
+ExpressionType Vectorization::GetExpressionType() const {
+	return ExpressionType::kVectorizationOp;
+}
+
 Vectorization* Vectorization::GetVectorizationExpression(Expression *child) {
 	return new Vectorization(
 		child->_rows * child->_cols, 1, child->_has_variable, child->_has_differential, child
@@ -115,6 +166,10 @@ Expression* Vectorization::Differentiate() const {
 
 Expression* Vectorization::Vectorize() const {
 	return _child->Vectorize();
+}
+
+ExpressionType Transpose::GetExpressionType() const {
+	return ExpressionType::kTransposeOp;
 }
 
 Transpose* Transpose::GetTransposeExpression(Expression *child) {
@@ -141,6 +196,10 @@ Expression * Transpose::Vectorize() const {
 	auto K = CommutationMatrix::GetCommutationMatrix(_child->_rows, _child->_cols);
 	auto vec_child = _child->Vectorize();
 	return MatrixProduct::GetMatrixProductExpression(K, vec_child);
+}
+
+ExpressionType ScalarPower::GetExpressionType() const {
+	return ExpressionType::kScalarPowerOp;
 }
 
 ScalarPower* ScalarPower::GetScalarPowerExpression(Expression *child, double power) {
@@ -185,6 +244,33 @@ void DoubleOpExpression::MarkVariable(unsigned int uuid) {
 	_has_variable = (_lhs->_has_variable || _rhs->_has_variable);
 }
 
+void DoubleOpExpression::MarkDifferential() {
+	_lhs->MarkDifferential();
+	_rhs->MarkDifferential();
+	_has_differential = (_lhs->_has_differential || _rhs->_has_differential);
+}
+
+DoubleOpExpression::~DoubleOpExpression() {
+	delete _lhs;
+	delete _rhs;
+}
+
+ExpressionType MatrixAddition::GetExpressionType() const {
+	return ExpressionType::kMatrixAdditionOp;
+}
+
+Expression* MatrixAddition::GetDerivative() const {
+	if (!_lhs->_has_differential && !_rhs->_has_differential) {
+		throw std::logic_error("getting derivative on expression that has no differential");
+	} else if (_lhs->_has_differential && !_rhs->_has_differential) {
+		return _lhs->GetDerivative();
+	} else if (!_lhs->_has_differential && _rhs->_has_differential) {
+		return _rhs->GetDerivative();
+	} else {
+		return GetMatrixAdditionExpression(_lhs->GetDerivative(), _rhs->GetDerivative());
+	}
+}
+
 MatrixAddition* MatrixAddition::GetMatrixAdditionExpression(Expression *lhs, Expression *rhs) {
 	if (lhs->_rows != rhs->_rows || lhs->_cols != rhs->_cols) {
 		throw std::logic_error("adding matrix of different shape");
@@ -217,10 +303,28 @@ Expression* MatrixAddition::Vectorize() const {
 	return GetMatrixAdditionExpression(_lhs->Vectorize(), _rhs->Vectorize());
 }
 
+ExpressionType MatrixProduct::GetExpressionType() const {
+	return ExpressionType::kMatrixProductOp;
+}
+
+Expression* MatrixProduct::GetDerivative() const {
+	if (!_lhs->_has_differential && !_rhs->_has_differential) {
+		throw std::logic_error("getting derivatives on expressions without differential");
+	} else if (_lhs->_has_differential && !_rhs->_has_differential) {
+		throw std::logic_error("differential appears on lhs of matrix product");
+	} else if (!_lhs->_has_differential && _rhs->_has_differential) {
+		return GetMatrixProductExpression(_lhs->Clone(), _rhs->GetDerivative());
+	} else {
+		throw std::logic_error("differential appears on both sides of matrix product");
+	}
+}
+
 MatrixProduct* MatrixProduct::GetMatrixProductExpression(
 	Expression *lhs, Expression *rhs
 ) {
-	assert(lhs->_cols == rhs->_rows);
+	if (lhs->_cols != rhs->_rows) {
+		throw std::logic_error("the shape of matrices in product does not match");
+	}
 	return new MatrixProduct(
 		lhs->_rows, rhs->_cols,
 		lhs->_has_variable || rhs->_has_variable,
@@ -280,6 +384,10 @@ Expression * MatrixProduct::Vectorize() const {
 		);
 	}
 	throw std::logic_error("vectorizing a matrix product without differentials");
+}
+
+ExpressionType KroneckerProduct::GetExpressionType() const {
+	return ExpressionType::kKroneckerProductOp;
 }
 
 KroneckerProduct* KroneckerProduct::GetKroneckerProduct(Expression *lhs, Expression *rhs) {
@@ -365,12 +473,16 @@ Expression * KroneckerProduct::Vectorize() const {
 			MatrixProduct::GetMatrixProductExpression(
 				I_kron_K_kron_I,
 				MatrixProduct::GetMatrixProductExpression(
-					vec_B_kron_I, _rhs->Vectorize()
+					vec_B_kron_I, _lhs->Vectorize()
 				)
 			)
 		);
 	}
 	throw std::logic_error("vectorizing a Kronecker product without differentials");
+}
+
+ExpressionType ScalarMatrixProduct::GetExpressionType() const {
+	return ExpressionType::kScalarMatrixProductOp;
 }
 
 ScalarMatrixProduct* ScalarMatrixProduct::GetScalarMatrixProduct(
@@ -434,8 +546,15 @@ Expression * ScalarMatrixProduct::Vectorize() const {
 	throw std::logic_error("vectorizing a scalar-matrix product without differentials");
 }
 
+
 void LeafExpression::MarkVariable(unsigned int uuid) {
 	_has_variable = false;
+}
+
+void LeafExpression::MarkDifferential() {}
+
+ExpressionType IdentityMatrix::GetExpressionType() const {
+	return ExpressionType::kIdentityMatrix;
 }
 
 IdentityMatrix* IdentityMatrix::GetIdentityMatrix(int order) {
@@ -456,6 +575,10 @@ Expression * IdentityMatrix::Differentiate() const {
 
 Expression * IdentityMatrix::Vectorize() const {
 	throw std::logic_error("vectorizing an identity matrix");
+}
+
+ExpressionType CommutationMatrix::GetExpressionType() const {
+	return ExpressionType::kCommutationMatrix;
 }
 
 Expression* CommutationMatrix::GetCommutationMatrix(int m, int n) {
@@ -485,6 +608,10 @@ Expression * CommutationMatrix::Vectorize() const {
 	throw std::logic_error("vectorizing a commutation matrix");
 }
 
+ExpressionType ScalarConstant::GetExpressionType() const {
+	return ExpressionType::kScalarConstant;
+}
+
 ScalarConstant* ScalarConstant::GetScalarConstant(double value) {
 	return new ScalarConstant(1, 1, false, false, value);
 }
@@ -505,8 +632,20 @@ Expression * ScalarConstant::Vectorize() const {
 	throw std::logic_error("vectorizing a scalar constant");
 }
 
+ExpressionType Variable::GetExpressionType() const {
+	return ExpressionType::kVariable;
+}
+
 void Variable::MarkVariable(unsigned int uuid) {
 	_has_variable = (uuid == _uuid);
+}
+
+Expression* Variable::GetDerivative() const {
+	if (_has_differential) {
+		return IdentityMatrix::GetIdentityMatrix(_rows);
+	} else {
+		throw std::logic_error("getting derivatives on expressions without differential");
+	}
 }
 
 Variable* Variable::GetVariable(const std::string &name, unsigned int uuid, int rows, int cols) {
@@ -514,11 +653,14 @@ Variable* Variable::GetVariable(const std::string &name, unsigned int uuid, int 
 }
 
 void Variable::Print(std::ostream &out) const {
+	if (_has_differential) {
+		out << "d";
+	}
 	out << _name;
 }
 
 Expression * Variable::Clone() const {
-	return GetVariable(_name, _uuid, _rows, _cols);
+	return new Variable(_rows, _cols, _has_variable, _has_differential, _name, _uuid);
 }
 
 Expression * Variable::Differentiate() const {
@@ -528,7 +670,13 @@ Expression * Variable::Differentiate() const {
 }
 
 Expression * Variable::Vectorize() const {
-	// TODO:
+	return new Variable(_rows * _cols, 1, _has_variable, _has_differential, _name, _uuid);
+}
+
+unsigned int UUIDGenerator::_cnt = 0;
+
+unsigned int UUIDGenerator::GenUUID() {
+	return _cnt++;
 }
 
 }

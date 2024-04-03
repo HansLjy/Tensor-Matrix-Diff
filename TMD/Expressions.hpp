@@ -1,320 +1,370 @@
 #pragma once
 
 #include <string>
+#include "TMDConfig.hpp"
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	#include "Eigen/Eigen"
+#endif
 
 namespace TMD {
-	enum class ExpressionType {
-		kNegateOp,
-		kInverseOp,
-		kDeterminantOp,
-		kVertorizationOp,
-		kTransposeOp,
-		kScalarPowerOp,
-		kMatrixAdditionOp,
-		kMatrixProductOp,
-		kKroneckerProductOp,
-		kScalarMatrixProductOp,
-		kIdentityMatrix,
-		kCommutationMatrix,
-		kScalarConstant,
-		kVariable
-	};
 
-    class Expression {
-    public:
-        Expression(
-            int rows, int cols,
-            bool has_variable,
-            bool has_differential):
-            _rows(rows), _cols(cols),
-            _has_variable(has_variable),
-            _has_differential(has_differential) {}
+class Expression;
+Expression* GetDerivative(const Expression* expression, unsigned int variable);
 
-		virtual ExpressionType GetExpressionType() = 0;
-		virtual void MarkVariable(unsigned int uuid) = 0;
+enum class ExpressionType {
+	kNegateOp,
+	kInverseOp,
+	kDeterminantOp,
+	kVectorizationOp,
+	kTransposeOp,
+	kScalarPowerOp,
+	kMatrixAdditionOp,
+	kMatrixProductOp,
+	kKroneckerProductOp,
+	kScalarMatrixProductOp,
+	kIdentityMatrix,
+	kCommutationMatrix,
+	kScalarConstant,
+	kVariable
+};
 
-        virtual void Print(std::ostream& out) const = 0;
-        virtual Expression* Clone() const = 0;
+class Expression {
+public:
+	Expression(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential):
+		_rows(rows), _cols(cols),
+		_has_variable(has_variable),
+		_has_differential(has_differential) {}
 
-		// return a **new** expression that equals
-		// the differential of the current one
-        virtual Expression* Differentiate() const = 0;
-        virtual Expression* Vectorize() const = 0;
+	virtual ExpressionType GetExpressionType() const = 0;
+	virtual void MarkVariable(unsigned int uuid) = 0;
+	virtual void MarkDifferential() = 0;
 
-        virtual ~Expression();
+	virtual Expression* GetDerivative() const;
 
-        int _rows, _cols;           // for scalar expression, simply set these to (1, 1)
-        bool _has_variable;
-        bool _has_differential;
-    };
+	virtual void Print(std::ostream& out) const = 0;
+	virtual Expression* Clone() const = 0;
 
-    class SingleOpExpression : public Expression {
-    public:
-        SingleOpExpression(
-            int rows, int cols,
-            bool has_variable,
-            bool has_differential,
-            Expression* child):
-            Expression(rows, cols, has_variable, has_differential),
-            _child(child) {}
-		
-		void MarkVariable(unsigned int uuid) override;
+	// return a **new** expression that equals
+	// the differential of the current one
+	virtual Expression* Differentiate() const = 0;
+	virtual Expression* Vectorize() const = 0;
 
-        void Print(std::ostream &out) const override = 0;
-        Expression * Clone() const override = 0;
-        Expression * Differentiate() const override = 0;
-        Expression * Vectorize() const override = 0;
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	virtual double SlowEvaluation() const = 0;
+#endif
 
-        Expression *_child;
-    };
+	virtual ~Expression() = default;
 
-    class Negate : public SingleOpExpression {
-    public:
-        using SingleOpExpression::SingleOpExpression;
+	int _rows, _cols;           // for scalar expression, simply set these to (1, 1)
+	bool _has_variable;
+	bool _has_differential;
+};
 
-        void Print(std::ostream &out) const override;
-        Expression * Clone() const override;
-        Expression * Differentiate() const override;
-        Expression * Vectorize() const override;
+class SingleOpExpression : public Expression {
+public:
+	SingleOpExpression(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		Expression* child):
+		Expression(rows, cols, has_variable, has_differential),
+		_child(child) {}
+	
+	ExpressionType GetExpressionType() const override = 0;
+	void MarkVariable(unsigned int uuid) override;
+	void MarkDifferential() override;
 
-        static Negate* GetNegateExpression(Expression* child);
-    };
+	void Print(std::ostream &out) const override = 0;
+	Expression * Clone() const override = 0;
+	Expression * Differentiate() const override = 0;
+	Expression * Vectorize() const override = 0;
 
-    class Inverse : public SingleOpExpression {
-    public:
-        using SingleOpExpression::SingleOpExpression;
-        void Print(std::ostream &out) const override;
-        Expression * Clone() const override;
-        Expression * Differentiate() const override;
-        Expression * Vectorize() const override;
+	~SingleOpExpression() override;
 
-        static Inverse* GetInverseExpression(Expression* child);
-    };
+	Expression *_child;
+};
 
-    class Determinant : public SingleOpExpression {
-    public:
-        using SingleOpExpression::SingleOpExpression;
+class Negate : public SingleOpExpression {
+public:
+	using SingleOpExpression::SingleOpExpression;
 
-        void Print(std::ostream &out) const override;
-        Expression * Clone() const override;
-        Expression * Differentiate() const override;
-        Expression * Vectorize() const override;
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-        static Determinant* GetMatrixDeterminantExpression(Expression* child);
-    };
+	static Negate* GetNegateExpression(Expression* child);
+};
 
-    class Vectorization : public SingleOpExpression {
-    public:
-		using SingleOpExpression::SingleOpExpression;
+class Inverse : public SingleOpExpression {
+public:
+	using SingleOpExpression::SingleOpExpression;
 
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-		static Vectorization* GetVectorizationExpression(Expression* child);
-    };
+	static Inverse* GetInverseExpression(Expression* child);
+};
 
-	class Transpose : public SingleOpExpression {
-	public:
-		using SingleOpExpression::SingleOpExpression;
+class Determinant : public SingleOpExpression {
+public:
+	using SingleOpExpression::SingleOpExpression;
 
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-		static Transpose* GetTransposeExpression(Expression* child);
-	};
+	static Determinant* GetMatrixDeterminantExpression(Expression* child);
+};
 
-    class ScalarPower : public SingleOpExpression {
-	public:
-		ScalarPower(
-			int rows, int cols,
-            bool has_variable,
-            bool has_differential,
-            Expression* child,
-			double power):
-			SingleOpExpression(rows, cols, has_variable, has_differential, child),
-			_power(power) {}
+class Vectorization : public SingleOpExpression {
+public:
+	using SingleOpExpression::SingleOpExpression;
 
-        double _power;
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+	static Vectorization* GetVectorizationExpression(Expression* child);
+};
 
-		static ScalarPower* GetScalarPowerExpression(Expression* child, double power);
-    };
+class Transpose : public SingleOpExpression {
+public:
+	using SingleOpExpression::SingleOpExpression;
 
-    class DoubleOpExpression : public Expression {
-    public:
-        DoubleOpExpression(
-            int rows, int cols,
-            bool has_variable,
-            bool has_differential,
-            Expression* lhs,
-            Expression* rhs):
-            Expression(rows, cols, has_variable, has_differential),
-            _lhs(lhs), _rhs(rhs) {}
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-		void MarkVariable(unsigned int uuid) override;
+	static Transpose* GetTransposeExpression(Expression* child);
+};
 
-        void Print(std::ostream &out) const override = 0;
-        Expression* Clone() const override = 0;
-        Expression* Differentiate() const override = 0;
-        Expression* Vectorize() const override = 0;
+class ScalarPower : public SingleOpExpression {
+public:
+	ScalarPower(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		Expression* child,
+		double power):
+		SingleOpExpression(rows, cols, has_variable, has_differential, child),
+		_power(power) {}
 
-        Expression *_lhs, *_rhs;
-    };
+	double _power;
 
-    class MatrixAddition : public DoubleOpExpression {
-	public:
-		using DoubleOpExpression::DoubleOpExpression;
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+	static ScalarPower* GetScalarPowerExpression(Expression* child, double power);
+};
 
-		static MatrixAddition* GetMatrixAdditionExpression(Expression* lhs, Expression* rhs);
-    };
+class DoubleOpExpression : public Expression {
+public:
+	DoubleOpExpression(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		Expression* lhs,
+		Expression* rhs):
+		Expression(rows, cols, has_variable, has_differential),
+		_lhs(lhs), _rhs(rhs) {}
 
-    class MatrixProduct : public DoubleOpExpression {
-    public:
-        using DoubleOpExpression::DoubleOpExpression;
+	ExpressionType GetExpressionType() const override = 0;
+	void MarkVariable(unsigned int uuid) override;
+	void MarkDifferential() override;
 
-        void Print(std::ostream &out) const override;
-        Expression * Clone() const override;
-        Expression * Differentiate() const override;
-        Expression * Vectorize() const override;
+	void Print(std::ostream &out) const override = 0;
+	Expression* Clone() const override = 0;
+	Expression* Differentiate() const override = 0;
+	Expression* Vectorize() const override = 0;
 
-        static MatrixProduct* GetMatrixProductExpression(Expression* lhs, Expression* rhs);
-    };
+	~DoubleOpExpression();
 
-    class KroneckerProduct : public DoubleOpExpression {
-	public:
-		using DoubleOpExpression::DoubleOpExpression;
+	Expression *_lhs, *_rhs;
+};
 
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+class MatrixAddition : public DoubleOpExpression {
+public:
+	using DoubleOpExpression::DoubleOpExpression;
 
-		static KroneckerProduct* GetKroneckerProduct(Expression* lhs, Expression* rhs);
-    };
+	ExpressionType GetExpressionType() const override;
 
-    class ScalarMatrixProduct : public DoubleOpExpression {
-	public:
-		// lhs will be the scalar
-		using DoubleOpExpression::DoubleOpExpression;
+	Expression* GetDerivative() const override;
 
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-		static ScalarMatrixProduct* GetScalarMatrixProduct(Expression* scalar, Expression* matrix);
-    };
+	static MatrixAddition* GetMatrixAdditionExpression(Expression* lhs, Expression* rhs);
+};
 
-    class LeafExpression : public Expression {
-	public:
-		using Expression::Expression;
+class MatrixProduct : public DoubleOpExpression {
+public:
+	using DoubleOpExpression::DoubleOpExpression;
 
-		void MarkVariable(unsigned int uuid) override;
+	ExpressionType GetExpressionType() const override;
 
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
-    };
+	Expression* GetDerivative() const override;
 
-    class IdentityMatrix : public LeafExpression {
-	public:
-		IdentityMatrix(
-            int rows, int cols,
-            bool has_variable,
-            bool has_differential,
-			int order):
-			LeafExpression(rows, cols, has_variable, has_differential),
-			_order(order) {}
-		
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-		static IdentityMatrix* GetIdentityMatrix(int order);
+	static MatrixProduct* GetMatrixProductExpression(Expression* lhs, Expression* rhs);
+};
 
-        int _order;
-    };
+class KroneckerProduct : public DoubleOpExpression {
+public:
+	using DoubleOpExpression::DoubleOpExpression;
 
-    class CommutationMatrix : public LeafExpression {
-	public:
-		CommutationMatrix(
-            int rows, int cols,
-            bool has_variable,
-            bool has_differential,
-			int m, int n):
-			LeafExpression(rows, cols, has_variable, has_differential),
-			_m(m), _n(n) {}
-		
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-		static Expression* GetCommutationMatrix(int m, int n);
+	static KroneckerProduct* GetKroneckerProduct(Expression* lhs, Expression* rhs);
+};
 
-        int _m, _n;
-    };
+class ScalarMatrixProduct : public DoubleOpExpression {
+public:
+	// lhs will be the scalar
+	using DoubleOpExpression::DoubleOpExpression;
 
-	class ScalarConstant : public LeafExpression {
-	public:
-		ScalarConstant(
-            int rows, int cols,
-            bool has_variable,
-            bool has_differential,
-			double value):
-			LeafExpression(rows, cols, has_variable, has_differential),
-			_value(value) {}
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+	static ScalarMatrixProduct* GetScalarMatrixProduct(Expression* scalar, Expression* matrix);
+};
 
-		static ScalarConstant* GetScalarConstant(double value);
-		double _value;
-	};
+class LeafExpression : public Expression {
+public:
+	using Expression::Expression;
 
-    class Variable : public LeafExpression {
-	public:
-		Variable(
-            int rows, int cols,
-            bool has_variable,
-            bool has_differential,
-			const std::string& name,
-			unsigned int uuid):
-			LeafExpression(rows, cols, has_variable, has_differential),
-			_name(name), _uuid(uuid) {}
-		
-		void MarkVariable(unsigned int uuid) override;
-		
-		void Print(std::ostream &out) const override;
-		Expression * Clone() const override;
-		Expression * Differentiate() const override;
-		Expression * Vectorize() const override;
+	ExpressionType GetExpressionType() const override = 0;
+	void MarkVariable(unsigned int uuid) override;
+	void MarkDifferential() override;
 
-		static Variable* GetVariable(const std::string& name, unsigned int uuid, int rows, int cols);
+	void Print(std::ostream &out) const override = 0;
+	Expression * Clone() const override = 0;
+	Expression * Differentiate() const override = 0;
+	Expression * Vectorize() const override = 0;
+};
 
-        std::string _name;
-        unsigned int _uuid;
-    };
+class IdentityMatrix : public LeafExpression {
+public:
+	IdentityMatrix(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		int order):
+		LeafExpression(rows, cols, has_variable, has_differential),
+		_order(order) {}
+	
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
 
-	class UUIDGenerator {
-	public:
-		static unsigned int GenUUID();
-	};
+	static IdentityMatrix* GetIdentityMatrix(int order);
+
+	int _order;
+};
+
+class CommutationMatrix : public LeafExpression {
+public:
+	CommutationMatrix(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		int m, int n):
+		LeafExpression(rows, cols, has_variable, has_differential),
+		_m(m), _n(n) {}
+	
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
+
+	static Expression* GetCommutationMatrix(int m, int n);
+
+	int _m, _n;
+};
+
+class ScalarConstant : public LeafExpression {
+public:
+	ScalarConstant(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		double value):
+		LeafExpression(rows, cols, has_variable, has_differential),
+		_value(value) {}
+
+	ExpressionType GetExpressionType() const override;
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
+
+	static ScalarConstant* GetScalarConstant(double value);
+	double _value;
+};
+
+class Variable : public LeafExpression {
+public:
+	Variable(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		const std::string& name,
+		unsigned int uuid):
+		LeafExpression(rows, cols, has_variable, has_differential),
+		_name(name), _uuid(uuid) {}
+
+	ExpressionType GetExpressionType() const override;
+	void MarkVariable(unsigned int uuid) override;
+
+	Expression* GetDerivative() const override;
+	
+	void Print(std::ostream &out) const override;
+	Expression * Clone() const override;
+	Expression * Differentiate() const override;
+	Expression * Vectorize() const override;
+
+	static Variable* GetVariable(const std::string& name, unsigned int uuid, int rows, int cols);
+
+	std::string _name;
+	unsigned int _uuid;
+};
+
+class UUIDGenerator {
+public:
+	static unsigned int _cnt;
+	static unsigned int GenUUID();
+};
+
 }

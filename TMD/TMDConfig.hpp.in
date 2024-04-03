@@ -1,0 +1,1 @@
+#cmakedefine IMPLEMENT_SLOW_EVALUATION
