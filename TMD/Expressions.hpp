@@ -35,16 +35,25 @@ enum class ExpressionType {
 	kVariable
 };
 
+/**
+ * Leaf > single op > kron > prod = scalar prod > +
+ *  4       3          2          1               0
+ */
+
+const int kNegatePriority               = 3;
+const int kInversePriority              = 3;
+const int kDeterminantPriority          = 3;
+const int kVectorizationPriority        = 3;
+const int kTransposePriority            = 3;
+const int kScalarPowerPriority          = 3;
+const int kMatrixAdditionPriority       = 0;
+const int kMatrixProductPriority        = 1;
+const int kKroneckerProductPriority     = 2;
+const int kScalarMatrixProductPriority  = 1;
+const int kLeafPriority                 = 4;
+
 class Expression {
 public:
-	Expression(
-		int rows, int cols,
-		bool has_variable,
-		bool has_differential):
-		_rows(rows), _cols(cols),
-		_has_variable(has_variable),
-		_has_differential(has_differential) {}
-
 	virtual ExpressionType GetExpressionType() const = 0;
 	virtual void MarkVariable(unsigned int uuid) = 0;
 	virtual void MarkDifferential() = 0;
@@ -65,20 +74,26 @@ public:
 
 	virtual ~Expression() = default;
 
+	const int _priority;
+
 	int _rows, _cols;           // for scalar expression, simply set these to (1, 1)
 	bool _has_variable;
 	bool _has_differential;
+
+protected:
+	Expression(
+		int priority,
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential):
+		_priority(priority),
+		_rows(rows), _cols(cols),
+		_has_variable(has_variable),
+		_has_differential(has_differential) {}
 };
 
 class SingleOpExpression : public Expression {
 public:
-	SingleOpExpression(
-		int rows, int cols,
-		bool has_variable,
-		bool has_differential,
-		Expression* child):
-		Expression(rows, cols, has_variable, has_differential),
-		_child(child) {}
 	
 	ExpressionType GetExpressionType() const override = 0;
 	void MarkVariable(unsigned int uuid) override;
@@ -96,6 +111,16 @@ public:
 	~SingleOpExpression() override;
 
 	Expression *_child;
+
+protected:
+	SingleOpExpression(
+		int priority,
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		Expression* child):
+		Expression(priority, rows, cols, has_variable, has_differential),
+		_child(child) {}
 };
 
 class Negate : public SingleOpExpression {
@@ -186,12 +211,13 @@ public:
 class ScalarPower : public SingleOpExpression {
 public:
 	ScalarPower(
+		int priority,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		Expression* child,
 		double power):
-		SingleOpExpression(rows, cols, has_variable, has_differential, child),
+		SingleOpExpression(priority, rows, cols, has_variable, has_differential, child),
 		_power(power) {}
 
 	double _power;
@@ -212,19 +238,21 @@ public:
 class DoubleOpExpression : public Expression {
 public:
 	DoubleOpExpression(
+		int priority,
+		const std::string& operator_sign,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		Expression* lhs,
 		Expression* rhs):
-		Expression(rows, cols, has_variable, has_differential),
-		_lhs(lhs), _rhs(rhs) {}
+		Expression(priority, rows, cols, has_variable, has_differential),
+		_lhs(lhs), _rhs(rhs), _operator_sign(operator_sign) {}
 
 	ExpressionType GetExpressionType() const override = 0;
 	void MarkVariable(unsigned int uuid) override;
 	void MarkDifferential() override;
 
-	void Print(std::ostream &out) const override = 0;
+	void Print(std::ostream &out) const override;
 	Expression* Clone() const override = 0;
 	Expression* Differentiate() const override = 0;
 	Expression* Vectorize() const override = 0;
@@ -237,6 +265,7 @@ public:
 	~DoubleOpExpression();
 
 	Expression *_lhs, *_rhs;
+	const std::string _operator_sign;
 };
 
 class MatrixAddition : public DoubleOpExpression {
@@ -247,7 +276,6 @@ public:
 
 	Expression* GetTransposedDerivative() const override;
 
-	void Print(std::ostream &out) const override;
 	Expression * Clone() const override;
 	Expression * Differentiate() const override;
 	Expression * Vectorize() const override;
@@ -266,7 +294,6 @@ public:
 	ExpressionType GetExpressionType() const override;
 	Expression* GetTransposedDerivative() const override;
 
-	void Print(std::ostream &out) const override;
 	Expression * Clone() const override;
 	Expression * Differentiate() const override;
 	Expression * Vectorize() const override;
@@ -283,7 +310,7 @@ public:
 	using DoubleOpExpression::DoubleOpExpression;
 
 	ExpressionType GetExpressionType() const override;
-	void Print(std::ostream &out) const override;
+
 	Expression * Clone() const override;
 	Expression * Differentiate() const override;
 	Expression * Vectorize() const override;
@@ -301,7 +328,7 @@ public:
 	using DoubleOpExpression::DoubleOpExpression;
 
 	ExpressionType GetExpressionType() const override;
-	void Print(std::ostream &out) const override;
+	
 	Expression * Clone() const override;
 	Expression * Differentiate() const override;
 	Expression * Vectorize() const override;
@@ -316,6 +343,12 @@ public:
 class LeafExpression : public Expression {
 public:
 	using Expression::Expression;
+
+	LeafExpression(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential) :
+		Expression(kLeafPriority, rows, cols, has_variable, has_differential) {} 
 
 	ExpressionType GetExpressionType() const override = 0;
 	void MarkVariable(unsigned int uuid) override;
@@ -435,6 +468,8 @@ public:
 	std::string _name;
 	unsigned int _uuid;
 };
+
+std::ostream& operator<<(std::ostream& out, const Expression& expr);
 
 class UUIDGenerator {
 public:
