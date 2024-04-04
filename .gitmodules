@@ -1,0 +1,3 @@
+[submodule "3rdParty/Numerics"]
+	path = 3rdParty/Numerics
+	url = git@github.com:HansLjy/Numerics.git

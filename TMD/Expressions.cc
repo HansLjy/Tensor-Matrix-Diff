@@ -2,25 +2,32 @@
 #include <iostream>
 #include <cassert>
 
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	#include "unsupported/Eigen/KroneckerProduct"
+	#include "MatrixManipulation.hpp"
+#endif
+
 const double eps = 1e-10;
 
 namespace TMD {
 
 Expression* GetDerivative(const Expression* expression, unsigned int variable) {
 	auto org_expr = expression->Clone();
-	org_expr->Print(std::cerr);
-	std::cerr << std::endl;
+	// org_expr->Print(std::cerr);
+	// std::cerr << std::endl;
 	org_expr->MarkVariable(variable);
 	auto diffed_expr = org_expr->Differentiate();
 	diffed_expr->MarkDifferential();
-	diffed_expr->Print(std::cerr);
-	std::cerr << std::endl;
+	// diffed_expr->Print(std::cerr);
+	// std::cerr << std::endl;
 	auto veced_expr = diffed_expr->Vectorize();
-	veced_expr->Print(std::cerr);
-	std::cerr << std::endl;
-	auto result = veced_expr->GetDerivative();
-	result->Print(std::cerr);
-	std::cerr << std::endl;
+	// veced_expr->Print(std::cerr);
+	// std::cerr << std::endl;
+	auto result = Transpose::GetTransposeExpression(
+		veced_expr->GetTransposedDerivative()
+	);
+	// result->Print(std::cerr);
+	// std::cerr << std::endl;
 
 	delete org_expr;
 	delete diffed_expr;
@@ -28,7 +35,7 @@ Expression* GetDerivative(const Expression* expression, unsigned int variable) {
 	return result;
 }
 
-Expression* Expression::GetDerivative() const {
+Expression* Expression::GetTransposedDerivative() const {
 	throw std::logic_error("should be copying instead of getting derivative");
 }
 
@@ -95,8 +102,8 @@ Expression* Inverse::Differentiate() const {
 	auto inv_child1 = GetInverseExpression(_child->Clone());
 	auto inv_child2 = GetInverseExpression(_child->Clone());
 	auto neg_inv_child1 = Negate::GetNegateExpression(inv_child1);
-	auto mult1 = MatrixProduct::GetMatrixProductExpression(neg_inv_child1, _child->Differentiate());
-	auto result = MatrixProduct::GetMatrixProductExpression(mult1, inv_child2);
+	auto mult1 = MatrixProduct::GetSelfType(neg_inv_child1, _child->Differentiate());
+	auto result = MatrixProduct::GetSelfType(mult1, inv_child2);
 	return result;
 }
 
@@ -131,8 +138,8 @@ Expression * Determinant::Differentiate() const {
 	auto vec_inv_A = Vectorization::GetVectorizationExpression(inv_A);
 	auto trans_vec_inv_A = Transpose::GetTransposeExpression(vec_inv_A);
 	auto vec_diff_A = Vectorization::GetVectorizationExpression(_child->Differentiate());
-	auto mult1 = MatrixProduct::GetMatrixProductExpression(trans_vec_inv_A, vec_diff_A);
-	auto result = ScalarMatrixProduct::GetScalarMatrixProduct(det_A, mult1);
+	auto mult1 = MatrixProduct::GetSelfType(trans_vec_inv_A, vec_diff_A);
+	auto result = ScalarMatrixProduct::GetSelfType(det_A, mult1);
 	return result;
 }
 
@@ -195,7 +202,7 @@ Expression * Transpose::Differentiate() const {
 Expression * Transpose::Vectorize() const {
 	auto K = CommutationMatrix::GetCommutationMatrix(_child->_rows, _child->_cols);
 	auto vec_child = _child->Vectorize();
-	return MatrixProduct::GetMatrixProductExpression(K, vec_child);
+	return MatrixProduct::GetSelfType(K, vec_child);
 }
 
 ExpressionType ScalarPower::GetExpressionType() const {
@@ -229,9 +236,9 @@ Expression * ScalarPower::Differentiate() const {
 		mult  = _child->Differentiate();
 	} else {
 		auto child_power_m_1 = GetScalarPowerExpression(_child->Clone(), _power - 1);
-		mult = ScalarMatrixProduct::GetScalarMatrixProduct(child_power_m_1, _child->Differentiate());
+		mult = ScalarMatrixProduct::GetSelfType(child_power_m_1, _child->Differentiate());
 	}
-	return ScalarMatrixProduct::GetScalarMatrixProduct(power, mult);
+	return ScalarMatrixProduct::GetSelfType(power, mult);
 }
 
 Expression * ScalarPower::Vectorize() const {
@@ -259,19 +266,19 @@ ExpressionType MatrixAddition::GetExpressionType() const {
 	return ExpressionType::kMatrixAdditionOp;
 }
 
-Expression* MatrixAddition::GetDerivative() const {
+Expression* MatrixAddition::GetTransposedDerivative() const {
 	if (!_lhs->_has_differential && !_rhs->_has_differential) {
 		throw std::logic_error("getting derivative on expression that has no differential");
 	} else if (_lhs->_has_differential && !_rhs->_has_differential) {
-		return _lhs->GetDerivative();
+		return _lhs->GetTransposedDerivative();
 	} else if (!_lhs->_has_differential && _rhs->_has_differential) {
-		return _rhs->GetDerivative();
+		return _rhs->GetTransposedDerivative();
 	} else {
-		return GetMatrixAdditionExpression(_lhs->GetDerivative(), _rhs->GetDerivative());
+		return GetSelfType(_lhs->GetTransposedDerivative(), _rhs->GetTransposedDerivative());
 	}
 }
 
-MatrixAddition* MatrixAddition::GetMatrixAdditionExpression(Expression *lhs, Expression *rhs) {
+MatrixAddition* MatrixAddition::GetSelfType(Expression *lhs, Expression *rhs) {
 	if (lhs->_rows != rhs->_rows || lhs->_cols != rhs->_cols) {
 		throw std::logic_error("adding matrix of different shape");
 	}
@@ -292,34 +299,46 @@ void MatrixAddition::Print(std::ostream &out) const {
 }
 
 Expression* MatrixAddition::Clone() const {
-	return GetMatrixAdditionExpression(_lhs->Clone(), _rhs->Clone());
+	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
 Expression* MatrixAddition::Differentiate() const {
-	return GetMatrixAdditionExpression(_lhs->Differentiate(), _rhs->Differentiate());
+	if (_lhs->_has_variable && _rhs->_has_variable) {
+		return GetSelfType(_lhs->Differentiate(), _rhs->Differentiate());
+	} else if (_lhs->_has_variable && !_rhs->_has_variable) {
+		return _lhs->Differentiate();
+	} else if (!_lhs->_has_variable && _rhs->_has_variable) {
+		return _rhs->Differentiate();
+	} else {
+		throw std::logic_error("differentiating an expression without variable");
+	}
 }
 
 Expression* MatrixAddition::Vectorize() const {
-	return GetMatrixAdditionExpression(_lhs->Vectorize(), _rhs->Vectorize());
+	if (_lhs->_has_differential && _rhs->_has_differential) {
+		return GetSelfType(_lhs->Vectorize(), _rhs->Vectorize());
+	} else {
+		throw std::logic_error("differential appears only on one side of addition");
+	}
 }
 
 ExpressionType MatrixProduct::GetExpressionType() const {
 	return ExpressionType::kMatrixProductOp;
 }
 
-Expression* MatrixProduct::GetDerivative() const {
+Expression* MatrixProduct::GetTransposedDerivative() const {
 	if (!_lhs->_has_differential && !_rhs->_has_differential) {
 		throw std::logic_error("getting derivatives on expressions without differential");
 	} else if (_lhs->_has_differential && !_rhs->_has_differential) {
 		throw std::logic_error("differential appears on lhs of matrix product");
 	} else if (!_lhs->_has_differential && _rhs->_has_differential) {
-		return GetMatrixProductExpression(_lhs->Clone(), _rhs->GetDerivative());
+		return GetSelfType(_lhs->Clone(), _rhs->GetTransposedDerivative());
 	} else {
 		throw std::logic_error("differential appears on both sides of matrix product");
 	}
 }
 
-MatrixProduct* MatrixProduct::GetMatrixProductExpression(
+MatrixProduct* MatrixProduct::GetSelfType(
 	Expression *lhs, Expression *rhs
 ) {
 	if (lhs->_cols != rhs->_rows) {
@@ -342,20 +361,20 @@ void MatrixProduct::Print(std::ostream &out) const {
 }
 
 Expression * MatrixProduct::Clone() const {
-	return GetMatrixProductExpression(_lhs->Clone(), _rhs->Clone());
+	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
 Expression * MatrixProduct::Differentiate() const {
 	if (_lhs->_has_variable && !_rhs->_has_variable) {
-		return GetMatrixProductExpression(_lhs->Differentiate(), _rhs->Clone());
+		return GetSelfType(_lhs->Differentiate(), _rhs->Clone());
 	}
 	if (_rhs->_has_variable && !_lhs->_has_variable) {
-		return GetMatrixProductExpression(_lhs->Clone(), _rhs->Differentiate());
+		return GetSelfType(_lhs->Clone(), _rhs->Differentiate());
 	}
 	if (_lhs->_has_variable && _rhs->_has_variable) {
-		return MatrixAddition::GetMatrixAdditionExpression(
-			GetMatrixProductExpression(_lhs->Differentiate(), _rhs->Clone()),
-			GetMatrixProductExpression(_lhs->Clone(), _rhs->Differentiate())
+		return MatrixAddition::GetSelfType(
+			GetSelfType(_lhs->Differentiate(), _rhs->Clone()),
+			GetSelfType(_lhs->Clone(), _rhs->Differentiate())
 		);
 	}
 	throw std::logic_error("differentiating a matrix product with no varaible");
@@ -368,18 +387,18 @@ Expression * MatrixProduct::Vectorize() const {
 	}
 	if (_lhs->_has_differential && !_rhs->_has_differential) {
 		auto BT = Transpose::GetTransposeExpression(_rhs->Clone());
-		auto BTKronI = KroneckerProduct::GetKroneckerProduct(
+		auto BTKronI = KroneckerProduct::GetSelfType(
 			BT, IdentityMatrix::GetIdentityMatrix(_lhs->_rows)
 		);
-		return MatrixProduct::GetMatrixProductExpression(
+		return MatrixProduct::GetSelfType(
 			BTKronI, _lhs->Vectorize()
 		);
 	}
 	if (!_lhs->_has_differential && _rhs->_has_differential) {
-		auto IKronA = KroneckerProduct::GetKroneckerProduct(
+		auto IKronA = KroneckerProduct::GetSelfType(
 			IdentityMatrix::GetIdentityMatrix(_rhs->_cols), _lhs->Clone()
 		);
-		return MatrixProduct::GetMatrixProductExpression(
+		return MatrixProduct::GetSelfType(
 			IKronA, _rhs->Vectorize()
 		);
 	}
@@ -390,7 +409,7 @@ ExpressionType KroneckerProduct::GetExpressionType() const {
 	return ExpressionType::kKroneckerProductOp;
 }
 
-KroneckerProduct* KroneckerProduct::GetKroneckerProduct(Expression *lhs, Expression *rhs) {
+KroneckerProduct* KroneckerProduct::GetSelfType(Expression *lhs, Expression *rhs) {
 	return new KroneckerProduct(
 		lhs->_rows * rhs->_rows,
 		lhs->_cols * rhs->_cols,
@@ -409,20 +428,20 @@ void KroneckerProduct::Print(std::ostream &out) const {
 }
 
 Expression * KroneckerProduct::Clone() const {
-	return GetKroneckerProduct(_lhs->Clone(), _rhs->Clone());
+	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
 Expression * KroneckerProduct::Differentiate() const {
 	if (_lhs->_has_variable && !_rhs->_has_variable) {
-		return GetKroneckerProduct(_lhs->Differentiate(), _rhs->Clone());
+		return GetSelfType(_lhs->Differentiate(), _rhs->Clone());
 	}
 	if (_rhs->_has_variable && !_lhs->_has_variable) {
-		return GetKroneckerProduct(_lhs->Clone(), _rhs->Differentiate());
+		return GetSelfType(_lhs->Clone(), _rhs->Differentiate());
 	}
 	if (_lhs->_has_variable && _rhs->_has_variable) {
-		return MatrixAddition::GetMatrixAdditionExpression(
-			GetKroneckerProduct(_lhs->Differentiate(), _rhs->Clone()),
-			GetKroneckerProduct(_lhs->Clone(), _rhs->Differentiate())
+		return MatrixAddition::GetSelfType(
+			GetSelfType(_lhs->Differentiate(), _rhs->Clone()),
+			GetSelfType(_lhs->Clone(), _rhs->Differentiate())
 		);
 	}
 	throw std::logic_error("differentiating a Kronecker product with no varaible");
@@ -434,45 +453,45 @@ Expression * KroneckerProduct::Vectorize() const {
 		throw std::logic_error("differential appears on both sides of matrix product");
 	}
 	if (!_lhs->_has_differential && _rhs->_has_differential) {
-		auto I_kron_K_kron_I = GetKroneckerProduct(
+		auto I_kron_K_kron_I = GetSelfType(
 			IdentityMatrix::GetIdentityMatrix(_lhs->_cols),
-			GetKroneckerProduct(
+			GetSelfType(
 				CommutationMatrix::GetCommutationMatrix(_rhs->_cols, _lhs->_rows),
 				IdentityMatrix::GetIdentityMatrix(_rhs->_rows)
 			)
 		);
-		auto vec_A_kron_I = GetKroneckerProduct(
+		auto vec_A_kron_I = GetSelfType(
 			Vectorization::GetVectorizationExpression(_lhs->Clone()),
 			IdentityMatrix::GetIdentityMatrix(_rhs->_rows * _rhs->_cols)
 		);
-		return MatrixProduct::GetMatrixProductExpression(
+		return MatrixProduct::GetSelfType(
 			I_kron_K_kron_I,
-			MatrixProduct::GetMatrixProductExpression(
+			MatrixProduct::GetSelfType(
 				vec_A_kron_I, _rhs->Vectorize()
 			)
 		);
 	}
 	if (_lhs->_has_differential && !_rhs->_has_differential) {
-		auto K_kron_K = GetKroneckerProduct(
+		auto K_kron_K = GetSelfType(
 			CommutationMatrix::GetCommutationMatrix(_lhs->_cols, _rhs->_cols),
 			CommutationMatrix::GetCommutationMatrix(_lhs->_rows, _rhs->_rows)
 		);
-		auto I_kron_K_kron_I = GetKroneckerProduct(
+		auto I_kron_K_kron_I = GetSelfType(
 			IdentityMatrix::GetIdentityMatrix(_rhs->_cols),
-			GetKroneckerProduct(
+			GetSelfType(
 				CommutationMatrix::GetCommutationMatrix(_lhs->_cols, _rhs->_rows),
 				IdentityMatrix::GetIdentityMatrix(_lhs->_rows)
 			)
 		);
-		auto vec_B_kron_I = GetKroneckerProduct(
+		auto vec_B_kron_I = GetSelfType(
 			Vectorization::GetVectorizationExpression(_rhs->Clone()),
 			IdentityMatrix::GetIdentityMatrix(_lhs->_rows * _lhs->_cols)
 		);
-		return MatrixProduct::GetMatrixProductExpression(
+		return MatrixProduct::GetSelfType(
 			K_kron_K,
-			MatrixProduct::GetMatrixProductExpression(
+			MatrixProduct::GetSelfType(
 				I_kron_K_kron_I,
-				MatrixProduct::GetMatrixProductExpression(
+				MatrixProduct::GetSelfType(
 					vec_B_kron_I, _lhs->Vectorize()
 				)
 			)
@@ -485,7 +504,7 @@ ExpressionType ScalarMatrixProduct::GetExpressionType() const {
 	return ExpressionType::kScalarMatrixProductOp;
 }
 
-ScalarMatrixProduct* ScalarMatrixProduct::GetScalarMatrixProduct(
+ScalarMatrixProduct* ScalarMatrixProduct::GetSelfType(
 	Expression *scalar, Expression *matrix
 ) {
 	if (scalar->_rows != 1 || scalar->_cols != 1) {
@@ -508,20 +527,20 @@ void ScalarMatrixProduct::Print(std::ostream &out) const {
 }
 
 Expression * ScalarMatrixProduct::Clone() const {
-	return GetScalarMatrixProduct(_lhs->Clone(), _rhs->Clone());
+	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
 Expression * ScalarMatrixProduct::Differentiate() const {
 	if (_lhs->_has_variable && !_rhs->_has_variable) {
-		return GetScalarMatrixProduct(_lhs->Differentiate(), _rhs->Clone());
+		return GetSelfType(_lhs->Differentiate(), _rhs->Clone());
 	}
 	if (_rhs->_has_variable && !_lhs->_has_variable) {
-		return GetScalarMatrixProduct(_lhs->Clone(), _rhs->Differentiate());
+		return GetSelfType(_lhs->Clone(), _rhs->Differentiate());
 	}
 	if (_lhs->_has_variable && _rhs->_has_variable) {
-		return MatrixAddition::GetMatrixAdditionExpression(
-			GetScalarMatrixProduct(_lhs->Differentiate(), _rhs->Clone()),
-			GetScalarMatrixProduct(_lhs->Clone(), _rhs->Differentiate())
+		return MatrixAddition::GetSelfType(
+			GetSelfType(_lhs->Differentiate(), _rhs->Clone()),
+			GetSelfType(_lhs->Clone(), _rhs->Differentiate())
 		);
 	}
 	throw std::logic_error("differentiating a scalar-matrix product with no varaible");
@@ -534,13 +553,14 @@ Expression * ScalarMatrixProduct::Vectorize() const {
 	}
 	if (_lhs->_has_differential && !_rhs->_has_differential) {
 		auto vec_B = Vectorization::GetVectorizationExpression(_rhs->Clone());
-		return MatrixProduct::GetMatrixProductExpression(
+		return MatrixProduct::GetSelfType(
 			vec_B, _lhs->Vectorize()
 		);
 	}
 	if (!_lhs->_has_differential && _rhs->_has_differential) {
-		return MatrixProduct::GetMatrixProductExpression(
-			_rhs->Vectorize(), _lhs->Clone()
+		return MatrixProduct::GetSelfType(
+			KroneckerProduct::GetSelfType(_lhs->Clone(), IdentityMatrix::GetIdentityMatrix(_rhs->_rows * _rhs->_cols)),
+			_rhs->Vectorize()
 		);
 	}
 	throw std::logic_error("vectorizing a scalar-matrix product without differentials");
@@ -640,7 +660,7 @@ void Variable::MarkVariable(unsigned int uuid) {
 	_has_variable = (uuid == _uuid);
 }
 
-Expression* Variable::GetDerivative() const {
+Expression* Variable::GetTransposedDerivative() const {
 	if (_has_differential) {
 		return IdentityMatrix::GetIdentityMatrix(_rows);
 	} else {
@@ -678,5 +698,86 @@ unsigned int UUIDGenerator::_cnt = 0;
 unsigned int UUIDGenerator::GenUUID() {
 	return _cnt++;
 }
+
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+
+Eigen::MatrixXd Negate::SlowEvaluation(const VariableTable& table) const {
+	return -_child->SlowEvaluation(table);
+}
+
+Eigen::MatrixXd Inverse::SlowEvaluation(const VariableTable& table) const {
+	return _child->SlowEvaluation(table).inverse();
+}
+
+Eigen::MatrixXd Determinant::SlowEvaluation(const VariableTable& table) const {
+	return (Eigen::MatrixXd(1, 1) << _child->SlowEvaluation(table).determinant()).finished();
+}
+
+Eigen::MatrixXd Vectorization::SlowEvaluation(const VariableTable& table) const {
+	Eigen::MatrixXd unveced_mat = _child->SlowEvaluation(table);
+	
+	int rows = unveced_mat.rows(), cols = unveced_mat.cols();
+	Eigen::MatrixXd result(unveced_mat.rows() * unveced_mat.cols(), 1);
+
+	for (int i = 0; i < cols; i++) {
+		result.block(i * rows, 0, rows, 1) = unveced_mat.col(i);
+	}
+	return result;
+}
+
+Eigen::MatrixXd Transpose::SlowEvaluation(const VariableTable& table) const {
+	return _child->SlowEvaluation(table).transpose();
+}
+
+Eigen::MatrixXd ScalarPower::SlowEvaluation(const VariableTable& table) const {
+	auto child_result = _child->SlowEvaluation(table);
+	return (Eigen::MatrixXd(1, 1) << std::pow(child_result(0, 0), _power)).finished();
+}
+
+Eigen::MatrixXd MatrixAddition::SlowEvaluation(const VariableTable& table) const {
+	return _lhs->SlowEvaluation(table) + _rhs->SlowEvaluation(table);
+}
+
+Eigen::MatrixXd MatrixProduct::SlowEvaluation(const VariableTable& table) const {
+	return _lhs->SlowEvaluation(table) * _rhs->SlowEvaluation(table);
+}
+
+Eigen::MatrixXd KroneckerProduct::SlowEvaluation(const VariableTable& table) const {
+	return Eigen::kroneckerProduct(
+		_lhs->SlowEvaluation(table),
+		_rhs->SlowEvaluation(table)
+	);
+}
+
+Eigen::MatrixXd ScalarMatrixProduct::SlowEvaluation(const VariableTable& table) const {
+	return _lhs->SlowEvaluation(table)(0, 0) * _rhs->SlowEvaluation(table);
+}
+
+Eigen::MatrixXd IdentityMatrix::SlowEvaluation(const VariableTable& table) const {
+	return Eigen::MatrixXd::Identity(_order, _order);
+}
+
+Eigen::MatrixXd CommutationMatrix::SlowEvaluation(const VariableTable& table) const {
+	return Numerics::GetPermutationMatrix(_m, _n);
+}
+
+Eigen::MatrixXd ScalarConstant::SlowEvaluation(const VariableTable& table) const {
+	return (Eigen::MatrixXd(1, 1) << _value).finished();
+}
+
+Eigen::MatrixXd Variable::SlowEvaluation(const VariableTable& table) const {
+	auto itr = table.find(_uuid);
+	if (itr == table.end()) {
+		throw std::logic_error("cannot find variable");
+	} else {
+		if (itr->second.rows() != _rows || itr->second.cols() != _cols) {
+			throw std::logic_error("variable value does not match specified size");
+		}
+		return itr->second;
+	}
+}
+
+#endif
 
 }
