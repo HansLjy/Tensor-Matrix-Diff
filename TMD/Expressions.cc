@@ -27,7 +27,7 @@ Expression* GetDerivative(const Expression* expression, unsigned int variable) {
 	auto veced_expr = diffed_expr->Vectorize();
 	// veced_expr->Print(std::cerr);
 	// std::cerr << std::endl;
-	auto result = Transpose::GetTransposeExpression(
+	auto result = Transpose::GetSelfType(
 		veced_expr->GetTransposedDerivative()
 	);
 	// result->Print(std::cerr);
@@ -61,26 +61,32 @@ ExpressionType Negate::GetExpressionType() const {
 	return ExpressionType::kNegateOp;
 }
 
-Negate* Negate::GetNegateExpression(Expression *child) {
+Negate* Negate::GetSelfType(Expression *child) {
 	return new Negate(child->_rows, child->_cols, child->_has_variable, child->_has_differential, child);
 }
 
 void Negate::Print(std::ostream &out) const {
-	out << "-\\left\\( ";
+	out << "-\\left( ";
 	_child->Print(out);
-	out << "\\right\\)";
+	out << "\\right)";
 }
 
 Expression* Negate::Clone() const {
-	return GetNegateExpression(_child->Clone());
+	return GetSelfType(_child->Clone());
 }
 
 Expression* Negate::Differentiate() const {
-	return GetNegateExpression(_child->Differentiate());
+	return GetSelfType(_child->Differentiate());
 }
 
 Expression* Negate::Vectorize() const {
-	return GetNegateExpression(_child->Vectorize());
+	return MatrixProduct::GetSelfType(
+		Negate::GetSelfType(	
+			IdentityMatrix::GetIdentityMatrix(_child->_rows * _child->_cols)
+		),
+		_child->Vectorize()
+	);
+	return GetSelfType(_child->Vectorize());
 }
 
 ExpressionType Inverse::GetExpressionType() const {
@@ -88,24 +94,24 @@ ExpressionType Inverse::GetExpressionType() const {
 }
 
 void Inverse::Print(std::ostream &out) const {
-	out << "\\left\\( ";
+	out << "\\left( ";
 	_child->Print(out);
-	out << " \\right\\)^{-1}";
+	out << " \\right)^{-1}";
 }
 
-Inverse* Inverse::GetInverseExpression(Expression *child) {
+Inverse* Inverse::GetSelfType(Expression *child) {
 	assert(child->_rows == child->_cols);
 	return new Inverse(child->_rows, child->_cols, child->_has_variable, child->_has_differential, child);
 }
 
 Expression* Inverse::Clone() const {
-	return GetInverseExpression(_child->Clone());
+	return GetSelfType(_child->Clone());
 }
 
 Expression* Inverse::Differentiate() const {
-	auto inv_child1 = GetInverseExpression(_child->Clone());
-	auto inv_child2 = GetInverseExpression(_child->Clone());
-	auto neg_inv_child1 = Negate::GetNegateExpression(inv_child1);
+	auto inv_child1 = GetSelfType(_child->Clone());
+	auto inv_child2 = GetSelfType(_child->Clone());
+	auto neg_inv_child1 = Negate::GetSelfType(inv_child1);
 	auto mult1 = MatrixProduct::GetSelfType(neg_inv_child1, _child->Differentiate());
 	auto result = MatrixProduct::GetSelfType(mult1, inv_child2);
 	return result;
@@ -119,7 +125,7 @@ ExpressionType Determinant::GetExpressionType() const {
 	return ExpressionType::kDeterminantOp;
 }
 
-Determinant* Determinant::GetMatrixDeterminantExpression(Expression *child) {
+Determinant* Determinant::GetSelfType(Expression *child) {
 	assert(child->_rows == child->_cols);
 	return new Determinant(
 		1, 1, child->_has_variable, child->_has_differential, child
@@ -133,15 +139,15 @@ void Determinant::Print(std::ostream &out) const {
 }
 
 Expression * Determinant::Clone() const {
-	return GetMatrixDeterminantExpression(_child->Clone());
+	return GetSelfType(_child->Clone());
 }
 
 Expression * Determinant::Differentiate() const {
-	auto det_A = GetMatrixDeterminantExpression(_child->Clone());
-	auto inv_A = Inverse::GetInverseExpression(_child->Clone());
-	auto vec_inv_A = Vectorization::GetVectorizationExpression(inv_A);
-	auto trans_vec_inv_A = Transpose::GetTransposeExpression(vec_inv_A);
-	auto vec_diff_A = Vectorization::GetVectorizationExpression(_child->Differentiate());
+	auto det_A = GetSelfType(_child->Clone());
+	auto trans_inv_A = Transpose::GetSelfType(Inverse::GetSelfType(_child->Clone()));
+	auto vec_inv_A = Vectorization::GetSelfType(trans_inv_A);
+	auto trans_vec_inv_A = Transpose::GetSelfType(vec_inv_A);
+	auto vec_diff_A = Vectorization::GetSelfType(_child->Differentiate());
 	auto mult1 = MatrixProduct::GetSelfType(trans_vec_inv_A, vec_diff_A);
 	auto result = ScalarMatrixProduct::GetSelfType(det_A, mult1);
 	return result;
@@ -155,7 +161,7 @@ ExpressionType Vectorization::GetExpressionType() const {
 	return ExpressionType::kVectorizationOp;
 }
 
-Vectorization* Vectorization::GetVectorizationExpression(Expression *child) {
+Vectorization* Vectorization::GetSelfType(Expression *child) {
 	return new Vectorization(
 		child->_rows * child->_cols, 1, child->_has_variable, child->_has_differential, child
 	);
@@ -168,11 +174,11 @@ void Vectorization::Print(std::ostream &out) const {
 }
 
 Expression* Vectorization::Clone() const {
-	return GetVectorizationExpression(_child->Clone());
+	return GetSelfType(_child->Clone());
 }
 
 Expression* Vectorization::Differentiate() const {
-	return GetVectorizationExpression(_child->Differentiate());
+	return GetSelfType(_child->Differentiate());
 }
 
 Expression* Vectorization::Vectorize() const {
@@ -183,7 +189,7 @@ ExpressionType Transpose::GetExpressionType() const {
 	return ExpressionType::kTransposeOp;
 }
 
-Transpose* Transpose::GetTransposeExpression(Expression *child) {
+Transpose* Transpose::GetSelfType(Expression *child) {
 	return new Transpose(
 		child->_cols, child->_rows, child->_has_variable, child->_has_differential, child
 	);
@@ -196,11 +202,11 @@ void Transpose::Print(std::ostream &out) const {
 }
 
 Expression * Transpose::Clone() const {
-	return GetTransposeExpression(_child->Clone());
+	return GetSelfType(_child->Clone());
 }
 
 Expression * Transpose::Differentiate() const {
-	return GetTransposeExpression(_child->Differentiate());
+	return GetSelfType(_child->Differentiate());
 }
 
 Expression * Transpose::Vectorize() const {
@@ -213,7 +219,7 @@ ExpressionType ScalarPower::GetExpressionType() const {
 	return ExpressionType::kScalarPowerOp;
 }
 
-ScalarPower* ScalarPower::GetScalarPowerExpression(Expression *child, double power) {
+ScalarPower* ScalarPower::GetSelfType(Expression *child, double power) {
 	assert(child->_rows == 1 && child->_cols == 1);
 	return new ScalarPower(
 		1, 1,
@@ -230,7 +236,7 @@ void ScalarPower::Print(std::ostream &out) const {
 }
 
 Expression * ScalarPower::Clone() const {
-	return GetScalarPowerExpression(_child->Clone(), _power);
+	return GetSelfType(_child->Clone(), _power);
 }
 
 Expression * ScalarPower::Differentiate() const {
@@ -239,7 +245,7 @@ Expression * ScalarPower::Differentiate() const {
 	if (std::abs(_power - 1) < eps) {
 		mult  = _child->Differentiate();
 	} else {
-		auto child_power_m_1 = GetScalarPowerExpression(_child->Clone(), _power - 1);
+		auto child_power_m_1 = GetSelfType(_child->Clone(), _power - 1);
 		mult = ScalarMatrixProduct::GetSelfType(child_power_m_1, _child->Differentiate());
 	}
 	return ScalarMatrixProduct::GetSelfType(power, mult);
@@ -390,7 +396,7 @@ Expression * MatrixProduct::Vectorize() const {
 		throw std::logic_error("differential appears on both sides of matrix product");
 	}
 	if (_lhs->_has_differential && !_rhs->_has_differential) {
-		auto BT = Transpose::GetTransposeExpression(_rhs->Clone());
+		auto BT = Transpose::GetSelfType(_rhs->Clone());
 		auto BTKronI = KroneckerProduct::GetSelfType(
 			BT, IdentityMatrix::GetIdentityMatrix(_lhs->_rows)
 		);
@@ -465,7 +471,7 @@ Expression * KroneckerProduct::Vectorize() const {
 			)
 		);
 		auto vec_A_kron_I = GetSelfType(
-			Vectorization::GetVectorizationExpression(_lhs->Clone()),
+			Vectorization::GetSelfType(_lhs->Clone()),
 			IdentityMatrix::GetIdentityMatrix(_rhs->_rows * _rhs->_cols)
 		);
 		return MatrixProduct::GetSelfType(
@@ -488,7 +494,7 @@ Expression * KroneckerProduct::Vectorize() const {
 			)
 		);
 		auto vec_B_kron_I = GetSelfType(
-			Vectorization::GetVectorizationExpression(_rhs->Clone()),
+			Vectorization::GetSelfType(_rhs->Clone()),
 			IdentityMatrix::GetIdentityMatrix(_lhs->_rows * _lhs->_cols)
 		);
 		return MatrixProduct::GetSelfType(
@@ -556,7 +562,7 @@ Expression * ScalarMatrixProduct::Vectorize() const {
 		throw std::logic_error("differential appears on both sides of scalar-matrix product");
 	}
 	if (_lhs->_has_differential && !_rhs->_has_differential) {
-		auto vec_B = Vectorization::GetVectorizationExpression(_rhs->Clone());
+		auto vec_B = Vectorization::GetSelfType(_rhs->Clone());
 		return MatrixProduct::GetSelfType(
 			vec_B, _lhs->Vectorize()
 		);

@@ -14,6 +14,8 @@ namespace TMD {
 #endif
 
 class Expression;
+
+// return nullptr if the expression does not contain the variable
 Expression* GetDerivative(const Expression* expression, unsigned int variable);
 
 enum class ExpressionType {
@@ -110,7 +112,7 @@ public:
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Negate* GetNegateExpression(Expression* child);
+	static Negate* GetSelfType(Expression* child);
 };
 
 class Inverse : public SingleOpExpression {
@@ -127,7 +129,7 @@ public:
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Inverse* GetInverseExpression(Expression* child);
+	static Inverse* GetSelfType(Expression* child);
 };
 
 class Determinant : public SingleOpExpression {
@@ -144,7 +146,7 @@ public:
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Determinant* GetMatrixDeterminantExpression(Expression* child);
+	static Determinant* GetSelfType(Expression* child);
 };
 
 class Vectorization : public SingleOpExpression {
@@ -161,7 +163,7 @@ public:
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Vectorization* GetVectorizationExpression(Expression* child);
+	static Vectorization* GetSelfType(Expression* child);
 };
 
 class Transpose : public SingleOpExpression {
@@ -178,7 +180,7 @@ public:
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Transpose* GetTransposeExpression(Expression* child);
+	static Transpose* GetSelfType(Expression* child);
 };
 
 class ScalarPower : public SingleOpExpression {
@@ -204,7 +206,7 @@ public:
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static ScalarPower* GetScalarPowerExpression(Expression* child, double power);
+	static ScalarPower* GetSelfType(Expression* child, double power);
 };
 
 class DoubleOpExpression : public Expression {
