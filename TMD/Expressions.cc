@@ -262,7 +262,7 @@ void ScalarPower::Print(std::ostream &out) const {
 	} else {
 		out << "\\left(";
 		_child->Print(out);
-		out << "\\right)^" << _power;
+		out << "\\right)^{" << _power << "}";
 	}
 }
 
