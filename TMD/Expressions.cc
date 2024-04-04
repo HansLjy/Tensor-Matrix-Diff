@@ -16,6 +16,10 @@ Expression* GetDerivative(const Expression* expression, unsigned int variable) {
 	// org_expr->Print(std::cerr);
 	// std::cerr << std::endl;
 	org_expr->MarkVariable(variable);
+	if (!org_expr->_has_variable) {
+		return nullptr;
+	}
+
 	auto diffed_expr = org_expr->Differentiate();
 	diffed_expr->MarkDifferential();
 	// diffed_expr->Print(std::cerr);
