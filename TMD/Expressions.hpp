@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include "TMDConfig.hpp"
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -9,14 +10,16 @@
 
 namespace TMD {
 
+
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	typedef std::map<unsigned int, Eigen::MatrixXd> VariableTable;
 #endif
 
 class Expression;
+typedef std::shared_ptr<Expression> ExpressionPtr;
 
 // return nullptr if the expression does not contain the variable
-Expression* GetDerivative(const Expression* expression, unsigned int variable);
+ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variable);
 
 enum class ExpressionType {
 	kNegateOp,
@@ -25,12 +28,16 @@ enum class ExpressionType {
 	kVectorizationOp,
 	kTransposeOp,
 	kScalarPowerOp,
+	kDiagonalizeOp,
+	kExpOp,
 	kMatrixAdditionOp,
 	kMatrixProductOp,
 	kKroneckerProductOp,
 	kScalarMatrixProductOp,
+	kHadamardProductOp,
 	kIdentityMatrix,
 	kCommutationMatrix,
+	kDiagonalizationMatrix,
 	kScalarConstant,
 	kVariable
 };
@@ -46,27 +53,29 @@ const int kDeterminantPriority          = 3;
 const int kVectorizationPriority        = 3;
 const int kTransposePriority            = 3;
 const int kScalarPowerPriority          = 3;
+const int kDiagonalizePriority          = 3;
+const int kExpPriority                  = 3;
 const int kMatrixAdditionPriority       = 0;
 const int kMatrixProductPriority        = 1;
 const int kKroneckerProductPriority     = 2;
 const int kScalarMatrixProductPriority  = 1;
+const int kHadamardProductPriority      = 2;
 const int kLeafPriority                 = 4;
 
 class Expression {
 public:
-	virtual ExpressionType GetExpressionType() const = 0;
 	virtual void MarkVariable(unsigned int uuid) = 0;
 	virtual void MarkDifferential() = 0;
 
-	virtual Expression* GetTransposedDerivative() const;
+	virtual ExpressionPtr GetTransposedDerivative() const;
 
 	virtual void Print(std::ostream& out) const = 0;
-	virtual Expression* Clone() const = 0;
+	virtual ExpressionPtr Clone() const = 0;
 
 	// return a **new** expression that equals
 	// the differential of the current one
-	virtual Expression* Differentiate() const = 0;
-	virtual Expression* Vectorize() const = 0;
+	virtual ExpressionPtr Differentiate() const = 0;
+	virtual ExpressionPtr Vectorize() const = 0;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	virtual Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const = 0;
@@ -75,18 +84,20 @@ public:
 	virtual ~Expression() = default;
 
 	const int _priority;
+	const ExpressionType _type;
 
 	int _rows, _cols;           // for scalar expression, simply set these to (1, 1)
 	bool _has_variable;
 	bool _has_differential;
 
-protected:
 	Expression(
 		int priority,
+		const ExpressionType& type,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential):
 		_priority(priority),
+		_type(type),
 		_rows(rows), _cols(cols),
 		_has_variable(has_variable),
 		_has_differential(has_differential) {}
@@ -95,31 +106,28 @@ protected:
 class SingleOpExpression : public Expression {
 public:
 	
-	ExpressionType GetExpressionType() const override = 0;
 	void MarkVariable(unsigned int uuid) override;
 	void MarkDifferential() override;
 
 	void Print(std::ostream &out) const override = 0;
-	Expression * Clone() const override = 0;
-	Expression * Differentiate() const override = 0;
-	Expression * Vectorize() const override = 0;
+	ExpressionPtr Clone() const override = 0;
+	ExpressionPtr Differentiate() const override = 0;
+	ExpressionPtr Vectorize() const override = 0;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
 #endif
 
-	~SingleOpExpression() override;
+	ExpressionPtr _child;
 
-	Expression *_child;
-
-protected:
 	SingleOpExpression(
 		int priority,
+		const ExpressionType& type,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
-		Expression* child):
-		Expression(priority, rows, cols, has_variable, has_differential),
+		ExpressionPtr child):
+		Expression(priority, type, rows, cols, has_variable, has_differential),
 		_child(child) {}
 };
 
@@ -127,144 +135,176 @@ class Negate : public SingleOpExpression {
 public:
 	using SingleOpExpression::SingleOpExpression;
 
-	ExpressionType GetExpressionType() const override;
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Negate* GetSelfType(Expression* child);
+	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
 class Inverse : public SingleOpExpression {
 public:
 	using SingleOpExpression::SingleOpExpression;
 
-	ExpressionType GetExpressionType() const override;
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Inverse* GetSelfType(Expression* child);
+	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
 class Determinant : public SingleOpExpression {
 public:
 	using SingleOpExpression::SingleOpExpression;
 
-	ExpressionType GetExpressionType() const override;
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Determinant* GetSelfType(Expression* child);
+	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
 class Vectorization : public SingleOpExpression {
 public:
 	using SingleOpExpression::SingleOpExpression;
 
-	ExpressionType GetExpressionType() const override;
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Vectorization* GetSelfType(Expression* child);
+	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
 class Transpose : public SingleOpExpression {
 public:
 	using SingleOpExpression::SingleOpExpression;
 
-	ExpressionType GetExpressionType() const override;
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Transpose* GetSelfType(Expression* child);
+	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
 class ScalarPower : public SingleOpExpression {
 public:
 	ScalarPower(
 		int priority,
+		const ExpressionType& type,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
-		Expression* child,
+		ExpressionPtr child,
 		double power):
-		SingleOpExpression(priority, rows, cols, has_variable, has_differential, child),
+		SingleOpExpression(priority, type, rows, cols, has_variable, has_differential, child),
 		_power(power) {}
 
 	double _power;
 
-	ExpressionType GetExpressionType() const override;
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static ScalarPower* GetSelfType(Expression* child, double power);
+	static ExpressionPtr GetSelfType(ExpressionPtr child, double power);
+};
+
+class Diagonalization : public SingleOpExpression {
+public:
+	using SingleOpExpression::SingleOpExpression;
+
+	void Print(std::ostream &out) const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
+#endif
+
+	static ExpressionPtr GetSelfType(ExpressionPtr child);
+};
+
+class Exp : public SingleOpExpression {
+public:
+	Exp(
+		int priority,
+		const ExpressionType& type,
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		ExpressionPtr child):
+		SingleOpExpression(priority, type, rows, cols, has_variable, has_differential, child) {}
+
+	void Print(std::ostream& out) const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
+#endif
+
+	static ExpressionPtr GetSelfType(ExpressionPtr child);	
 };
 
 class DoubleOpExpression : public Expression {
 public:
 	DoubleOpExpression(
 		int priority,
+		const ExpressionType& type,
 		const std::string& operator_sign,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
-		Expression* lhs,
-		Expression* rhs):
-		Expression(priority, rows, cols, has_variable, has_differential),
+		ExpressionPtr lhs,
+		ExpressionPtr rhs):
+		Expression(priority, type, rows, cols, has_variable, has_differential),
 		_lhs(lhs), _rhs(rhs), _operator_sign(operator_sign) {}
 
-	ExpressionType GetExpressionType() const override = 0;
 	void MarkVariable(unsigned int uuid) override;
 	void MarkDifferential() override;
 
 	void Print(std::ostream &out) const override;
-	Expression* Clone() const override = 0;
-	Expression* Differentiate() const override = 0;
-	Expression* Vectorize() const override = 0;
+	ExpressionPtr Clone() const override = 0;
+	ExpressionPtr Differentiate() const override = 0;
+	ExpressionPtr Vectorize() const override = 0;
 
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
 #endif
 
-	~DoubleOpExpression();
-
-	Expression *_lhs, *_rhs;
+	ExpressionPtr _lhs, _rhs;
 	const std::string _operator_sign;
 };
 
@@ -272,54 +312,49 @@ class MatrixAddition : public DoubleOpExpression {
 public:
 	using DoubleOpExpression::DoubleOpExpression;
 
-	ExpressionType GetExpressionType() const override;
+	ExpressionPtr GetTransposedDerivative() const override;
 
-	Expression* GetTransposedDerivative() const override;
-
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static MatrixAddition* GetSelfType(Expression* lhs, Expression* rhs);
+	static ExpressionPtr GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs);
 };
 
 class MatrixProduct : public DoubleOpExpression {
 public:
 	using DoubleOpExpression::DoubleOpExpression;
 
-	ExpressionType GetExpressionType() const override;
-	Expression* GetTransposedDerivative() const override;
+	ExpressionPtr GetTransposedDerivative() const override;
 
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static MatrixProduct* GetSelfType(Expression* lhs, Expression* rhs);
+	static ExpressionPtr GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs);
 };
 
 class KroneckerProduct : public DoubleOpExpression {
 public:
 	using DoubleOpExpression::DoubleOpExpression;
 
-	ExpressionType GetExpressionType() const override;
-
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static KroneckerProduct* GetSelfType(Expression* lhs, Expression* rhs);
+	static ExpressionPtr GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs);
 };
 
 class ScalarMatrixProduct : public DoubleOpExpression {
@@ -327,17 +362,31 @@ public:
 	// lhs will be the scalar
 	using DoubleOpExpression::DoubleOpExpression;
 
-	ExpressionType GetExpressionType() const override;
-	
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static ScalarMatrixProduct* GetSelfType(Expression* scalar, Expression* matrix);
+	static ExpressionPtr GetSelfType(ExpressionPtr scalar, ExpressionPtr matrix);
+};
+
+class HadamardProduct : public DoubleOpExpression {
+public:
+	using DoubleOpExpression::DoubleOpExpression;
+	
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
+#endif
+
+	static ExpressionPtr GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs);
+
 };
 
 class LeafExpression : public Expression {
@@ -345,19 +394,19 @@ public:
 	using Expression::Expression;
 
 	LeafExpression(
+		const ExpressionType& type,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential) :
-		Expression(kLeafPriority, rows, cols, has_variable, has_differential) {} 
+		Expression(kLeafPriority, type, rows, cols, has_variable, has_differential) {} 
 
-	ExpressionType GetExpressionType() const override = 0;
 	void MarkVariable(unsigned int uuid) override;
 	void MarkDifferential() override;
 
 	void Print(std::ostream &out) const override = 0;
-	Expression * Clone() const override = 0;
-	Expression * Differentiate() const override = 0;
-	Expression * Vectorize() const override = 0;
+	ExpressionPtr Clone() const override = 0;
+	ExpressionPtr Differentiate() const override = 0;
+	ExpressionPtr Vectorize() const override = 0;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
@@ -371,20 +420,19 @@ public:
 		bool has_variable,
 		bool has_differential,
 		int order):
-		LeafExpression(rows, cols, has_variable, has_differential),
+		LeafExpression(ExpressionType::kIdentityMatrix, rows, cols, has_variable, has_differential),
 		_order(order) {}
 	
-	ExpressionType GetExpressionType() const override;
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static IdentityMatrix* GetIdentityMatrix(int order);
+	static ExpressionPtr GetSelfType(int order);
 
 	int _order;
 };
@@ -396,45 +444,67 @@ public:
 		bool has_variable,
 		bool has_differential,
 		int m, int n):
-		LeafExpression(rows, cols, has_variable, has_differential),
+		LeafExpression(ExpressionType::kCommutationMatrix, rows, cols, has_variable, has_differential),
 		_m(m), _n(n) {}
 	
-	ExpressionType GetExpressionType() const override;
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Expression* GetCommutationMatrix(int m, int n);
+	static ExpressionPtr GetSelfType(int m, int n);
 
 	int _m, _n;
 };
 
-class ScalarConstant : public LeafExpression {
+class DiagonalizationMatrix : public LeafExpression {
 public:
-	ScalarConstant(
+	DiagonalizationMatrix(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		int order):
+		LeafExpression(ExpressionType::kDiagonalizationMatrix, rows, cols, has_variable, has_differential),
+		_order(order) {}
+	
+	void Print(std::ostream &out) const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
+#endif
+
+	static ExpressionPtr GetSelfType(int order);
+
+	int _order;
+};
+
+class Constant : public LeafExpression {
+public:
+	Constant(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		double value):
-		LeafExpression(rows, cols, has_variable, has_differential),
+		LeafExpression(ExpressionType::kScalarConstant, rows, cols, has_variable, has_differential),
 		_value(value) {}
 
-	ExpressionType GetExpressionType() const override;
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static ScalarConstant* GetScalarConstant(double value);
+	static ExpressionPtr GetSelfType(double value);
 	double _value;
 };
 
@@ -446,24 +516,23 @@ public:
 		bool has_differential,
 		const std::string& name,
 		unsigned int uuid):
-		LeafExpression(rows, cols, has_variable, has_differential),
+		LeafExpression(ExpressionType::kVariable, rows, cols, has_variable, has_differential),
 		_name(name), _uuid(uuid) {}
 
-	ExpressionType GetExpressionType() const override;
 	void MarkVariable(unsigned int uuid) override;
 
-	Expression* GetTransposedDerivative() const override;
+	ExpressionPtr GetTransposedDerivative() const override;
 	
 	void Print(std::ostream &out) const override;
-	Expression * Clone() const override;
-	Expression * Differentiate() const override;
-	Expression * Vectorize() const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static Variable* GetVariable(const std::string& name, unsigned int uuid, int rows, int cols);
+	static std::shared_ptr<Variable> GetSelfType(const std::string& name, unsigned int uuid, int rows, int cols);
 
 	std::string _name;
 	unsigned int _uuid;
@@ -476,5 +545,15 @@ public:
 	static unsigned int _cnt;
 	static unsigned int GenUUID();
 };
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+
+Eigen::MatrixXd GetExpressionNumericDerivative(
+	const TMD::ExpressionPtr expression,
+	const TMD::VariableTable& table,
+	unsigned int uuid
+);
+
+#endif
 
 }

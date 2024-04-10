@@ -5,41 +5,32 @@
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	#include "unsupported/Eigen/KroneckerProduct"
 	#include "MatrixManipulation.hpp"
+	#include "FiniteDifference.hpp"
 #endif
 
 const double eps = 1e-10;
 
 namespace TMD {
 
-Expression* GetDerivative(const Expression* expression, unsigned int variable) {
+ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variable) {
 	auto org_expr = expression->Clone();
-	// org_expr->Print(std::cerr);
-	// std::cerr << std::endl;
 	org_expr->MarkVariable(variable);
 	if (!org_expr->_has_variable) {
 		return nullptr;
 	}
-
 	auto diffed_expr = org_expr->Differentiate();
 	diffed_expr->MarkDifferential();
-	// diffed_expr->Print(std::cerr);
-	// std::cerr << std::endl;
+
 	auto veced_expr = diffed_expr->Vectorize();
-	// veced_expr->Print(std::cerr);
-	// std::cerr << std::endl;
 	auto result = Transpose::GetSelfType(
 		veced_expr->GetTransposedDerivative()
 	);
-	result->Print(std::cerr);
-	std::cerr << std::endl;
 
-	delete org_expr;
-	delete diffed_expr;
-	delete veced_expr;
+
 	return result;
 }
 
-Expression* Expression::GetTransposedDerivative() const {
+ExpressionPtr Expression::GetTransposedDerivative() const {
 	throw std::logic_error("should be copying instead of getting derivative");
 }
 
@@ -53,49 +44,44 @@ void SingleOpExpression::MarkDifferential() {
 	_has_differential = _child->_has_differential;
 }
 
-SingleOpExpression::~SingleOpExpression() {
-	delete _child;
-}
-
-ExpressionType Negate::GetExpressionType() const {
-	return ExpressionType::kNegateOp;
-}
-
-Negate* Negate::GetSelfType(Expression *child) {
-	return new Negate(kNegatePriority, child->_rows, child->_cols, child->_has_variable, child->_has_differential, child);
+ExpressionPtr Negate::GetSelfType(ExpressionPtr child) {
+	return std::make_shared<Negate>(
+		kNegatePriority,
+		ExpressionType::kNegateOp,
+		child->_rows, child->_cols,
+		child->_has_variable, child->_has_differential,
+		child
+	);
 }
 
 void Negate::Print(std::ostream &out) const {
 	if (_child->_priority > _priority) {
-		out << "-";
-		_child->Print(out);
-	} else {
-		out << "-\\left( ";
+		out << "\\left(-";
 		_child->Print(out);
 		out << "\\right)";
+	} else {
+		out << "\\left(-\\left( ";
+		_child->Print(out);
+		out << "\\right)\\right)";
 	}
 }
 
-Expression* Negate::Clone() const {
+ExpressionPtr Negate::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-Expression* Negate::Differentiate() const {
+ExpressionPtr Negate::Differentiate() const {
 	return GetSelfType(_child->Differentiate());
 }
 
-Expression* Negate::Vectorize() const {
+ExpressionPtr Negate::Vectorize() const {
 	return MatrixProduct::GetSelfType(
 		Negate::GetSelfType(	
-			IdentityMatrix::GetIdentityMatrix(_child->_rows * _child->_cols)
+			IdentityMatrix::GetSelfType(_child->_rows * _child->_cols)
 		),
 		_child->Vectorize()
 	);
 	return GetSelfType(_child->Vectorize());
-}
-
-ExpressionType Inverse::GetExpressionType() const {
-	return ExpressionType::kInverseOp;
 }
 
 void Inverse::Print(std::ostream &out) const {
@@ -109,16 +95,22 @@ void Inverse::Print(std::ostream &out) const {
 	}
 }
 
-Inverse* Inverse::GetSelfType(Expression *child) {
+ExpressionPtr Inverse::GetSelfType(ExpressionPtr child) {
 	assert(child->_rows == child->_cols);
-	return new Inverse(kInversePriority, child->_rows, child->_cols, child->_has_variable, child->_has_differential, child);
+	return std::make_shared<Inverse>(
+		kInversePriority,
+		ExpressionType::kInverseOp,
+		child->_rows, child->_cols,
+		child->_has_variable, child->_has_differential,
+		child
+	);
 }
 
-Expression* Inverse::Clone() const {
+ExpressionPtr Inverse::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-Expression* Inverse::Differentiate() const {
+ExpressionPtr Inverse::Differentiate() const {
 	auto inv_child1 = GetSelfType(_child->Clone());
 	auto inv_child2 = GetSelfType(_child->Clone());
 	auto neg_inv_child1 = Negate::GetSelfType(inv_child1);
@@ -127,24 +119,20 @@ Expression* Inverse::Differentiate() const {
 	return result;
 }
 
-Expression* Inverse::Vectorize() const {
+ExpressionPtr Inverse::Vectorize() const {
 	throw std::logic_error("vectorizing the inverse");
 }
 
-ExpressionType Determinant::GetExpressionType() const {
-	return ExpressionType::kDeterminantOp;
-}
-
-Determinant* Determinant::GetSelfType(Expression *child) {
+ExpressionPtr Determinant::GetSelfType(ExpressionPtr child) {
 	assert(child->_rows == child->_cols);
-	return new Determinant(
-		kDeterminantPriority, 1, 1, child->_has_variable, child->_has_differential, child
+	return std::make_shared<Determinant>(
+		kDeterminantPriority, ExpressionType::kDeterminantOp, 1, 1, child->_has_variable, child->_has_differential, child
 	);
 }
 
 void Determinant::Print(std::ostream &out) const {
 	if (_child->_priority > _priority) {
-		out << "\\det";
+		out << "\\det ";
 		_child->Print(out);
 	} else {
 		out << "\\det \\left(";
@@ -153,11 +141,11 @@ void Determinant::Print(std::ostream &out) const {
 	}
 }
 
-Expression * Determinant::Clone() const {
+ExpressionPtr Determinant::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-Expression * Determinant::Differentiate() const {
+ExpressionPtr Determinant::Differentiate() const {
 	auto det_A = GetSelfType(_child->Clone());
 	auto trans_inv_A = Transpose::GetSelfType(Inverse::GetSelfType(_child->Clone()));
 	auto vec_inv_A = Vectorization::GetSelfType(trans_inv_A);
@@ -168,17 +156,13 @@ Expression * Determinant::Differentiate() const {
 	return result;
 }
 
-Expression * Determinant::Vectorize() const {
+ExpressionPtr Determinant::Vectorize() const {
 	throw std::logic_error("vecorizing the determinant");
 }
 
-ExpressionType Vectorization::GetExpressionType() const {
-	return ExpressionType::kVectorizationOp;
-}
-
-Vectorization* Vectorization::GetSelfType(Expression *child) {
-	return new Vectorization(
-		kVectorizationPriority, child->_rows * child->_cols, 1, child->_has_variable, child->_has_differential, child
+ExpressionPtr Vectorization::GetSelfType(ExpressionPtr child) {
+	return std::make_shared<Vectorization> (
+		kVectorizationPriority, ExpressionType::kVectorizationOp, child->_rows * child->_cols, 1, child->_has_variable, child->_has_differential, child
 	);
 }
 
@@ -193,25 +177,21 @@ void Vectorization::Print(std::ostream &out) const {
 	}
 }
 
-Expression* Vectorization::Clone() const {
+ExpressionPtr Vectorization::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-Expression* Vectorization::Differentiate() const {
+ExpressionPtr Vectorization::Differentiate() const {
 	return GetSelfType(_child->Differentiate());
 }
 
-Expression* Vectorization::Vectorize() const {
+ExpressionPtr Vectorization::Vectorize() const {
 	return _child->Vectorize();
 }
 
-ExpressionType Transpose::GetExpressionType() const {
-	return ExpressionType::kTransposeOp;
-}
-
-Transpose* Transpose::GetSelfType(Expression *child) {
-	return new Transpose(
-		kTransposePriority, child->_cols, child->_rows, child->_has_variable, child->_has_differential, child
+ExpressionPtr Transpose::GetSelfType(ExpressionPtr child) {
+	return std::make_shared<Transpose>(
+		kTransposePriority, ExpressionType::kTransposeOp, child->_cols, child->_rows, child->_has_variable, child->_has_differential, child
 	);
 }
 
@@ -226,28 +206,25 @@ void Transpose::Print(std::ostream &out) const {
 	}
 }
 
-Expression * Transpose::Clone() const {
+ExpressionPtr Transpose::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-Expression * Transpose::Differentiate() const {
+ExpressionPtr Transpose::Differentiate() const {
 	return GetSelfType(_child->Differentiate());
 }
 
-Expression * Transpose::Vectorize() const {
-	auto K = CommutationMatrix::GetCommutationMatrix(_child->_rows, _child->_cols);
+ExpressionPtr Transpose::Vectorize() const {
+	auto K = CommutationMatrix::GetSelfType(_child->_rows, _child->_cols);
 	auto vec_child = _child->Vectorize();
 	return MatrixProduct::GetSelfType(K, vec_child);
 }
 
-ExpressionType ScalarPower::GetExpressionType() const {
-	return ExpressionType::kScalarPowerOp;
-}
-
-ScalarPower* ScalarPower::GetSelfType(Expression *child, double power) {
+ExpressionPtr ScalarPower::GetSelfType(ExpressionPtr child, double power) {
 	assert(child->_rows == 1 && child->_cols == 1);
-	return new ScalarPower(
+	return std::make_shared<ScalarPower>(
 		kScalarPowerPriority,
+		ExpressionType::kScalarPowerOp,
 		1, 1,
 		child->_has_variable,
 		child->_has_differential,
@@ -266,13 +243,13 @@ void ScalarPower::Print(std::ostream &out) const {
 	}
 }
 
-Expression * ScalarPower::Clone() const {
+ExpressionPtr ScalarPower::Clone() const {
 	return GetSelfType(_child->Clone(), _power);
 }
 
-Expression * ScalarPower::Differentiate() const {
-	auto power = ScalarConstant::GetScalarConstant(_power);
-	Expression* mult;
+ExpressionPtr ScalarPower::Differentiate() const {
+	auto power = Constant::GetSelfType(_power);
+	ExpressionPtr mult;
 	if (std::abs(_power - 1) < eps) {
 		mult  = _child->Differentiate();
 	} else {
@@ -282,8 +259,64 @@ Expression * ScalarPower::Differentiate() const {
 	return ScalarMatrixProduct::GetSelfType(power, mult);
 }
 
-Expression * ScalarPower::Vectorize() const {
+ExpressionPtr ScalarPower::Vectorize() const {
 	throw std::logic_error("vectorizing the scalar power");
+}
+
+void Diagonalization::Print(std::ostream &out) const {
+	out << "diag \\left(";
+	_child->Print(out);
+	out << "\\right)";
+}
+
+ExpressionPtr Diagonalization::Clone() const {
+	return GetSelfType(_child->Clone());
+}
+
+ExpressionPtr Diagonalization::Differentiate() const {
+	return GetSelfType(_child->Differentiate());
+}
+
+ExpressionPtr Diagonalization::Vectorize() const {
+	return MatrixProduct::GetSelfType(
+		DiagonalizationMatrix::GetSelfType(_child->_rows),
+		_child->Vectorize()
+	);
+}
+
+ExpressionPtr Diagonalization::GetSelfType(ExpressionPtr child) {
+	assert(child->_cols == 1);
+	return std::make_shared<Diagonalization>(
+		kDiagonalizePriority, ExpressionType::kDiagonalizeOp,
+		child->_rows, child->_rows,
+		child->_has_variable, child->_has_differential,
+		child
+	);
+}
+
+void Exp::Print(std::ostream &out) const {
+	out << "\\exp \\left(";
+	_child->Print(out);
+	out << "\\right)";
+}
+
+ExpressionPtr Exp::Clone() const {
+	return GetSelfType(_child->Clone());
+}
+
+ExpressionPtr Exp::Differentiate() const {
+	return HadamardProduct::GetSelfType(
+		GetSelfType(_child->Clone()),
+		_child->Differentiate()
+	);
+}
+
+ExpressionPtr Exp::Vectorize() const {
+	throw std::logic_error("vectorizing an exp expression");
+}
+
+ExpressionPtr Exp::GetSelfType(ExpressionPtr child) {
+	return std::make_shared<Exp>(kExpPriority, ExpressionType::kExpOp, child->_rows, child->_cols, child->_has_variable, child->_has_differential, child);
 }
 
 void DoubleOpExpression::MarkVariable(unsigned int uuid) {
@@ -311,7 +344,7 @@ void DoubleOpExpression::Print(std::ostream &out) const {
 	}
 	if (_rhs->_priority > _priority) {
 		_rhs->Print(out);
-	} else if (_rhs->GetExpressionType() == GetExpressionType()) {
+	} else if (_rhs->_type == _type) {
 		// TODO: consider left/right composition order
 		_rhs->Print(out);
 	} else {
@@ -321,16 +354,7 @@ void DoubleOpExpression::Print(std::ostream &out) const {
 	}
 }
 
-DoubleOpExpression::~DoubleOpExpression() {
-	delete _lhs;
-	delete _rhs;
-}
-
-ExpressionType MatrixAddition::GetExpressionType() const {
-	return ExpressionType::kMatrixAdditionOp;
-}
-
-Expression* MatrixAddition::GetTransposedDerivative() const {
+ExpressionPtr MatrixAddition::GetTransposedDerivative() const {
 	if (!_lhs->_has_differential && !_rhs->_has_differential) {
 		throw std::logic_error("getting derivative on expression that has no differential");
 	} else if (_lhs->_has_differential && !_rhs->_has_differential) {
@@ -342,12 +366,13 @@ Expression* MatrixAddition::GetTransposedDerivative() const {
 	}
 }
 
-MatrixAddition* MatrixAddition::GetSelfType(Expression *lhs, Expression *rhs) {
+ExpressionPtr MatrixAddition::GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs) {
 	if (lhs->_rows != rhs->_rows || lhs->_cols != rhs->_cols) {
 		throw std::logic_error("adding matrix of different shape");
 	}
-	return new MatrixAddition(
+	return std::make_shared<MatrixAddition>(
 		kMatrixAdditionPriority,
+		ExpressionType::kMatrixAdditionOp,
 		"+",
 		lhs->_rows, lhs->_cols,
 		lhs->_has_variable || rhs->_has_variable,
@@ -356,11 +381,11 @@ MatrixAddition* MatrixAddition::GetSelfType(Expression *lhs, Expression *rhs) {
 	);
 }
 
-Expression* MatrixAddition::Clone() const {
+ExpressionPtr MatrixAddition::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-Expression* MatrixAddition::Differentiate() const {
+ExpressionPtr MatrixAddition::Differentiate() const {
 	if (_lhs->_has_variable && _rhs->_has_variable) {
 		return GetSelfType(_lhs->Differentiate(), _rhs->Differentiate());
 	} else if (_lhs->_has_variable && !_rhs->_has_variable) {
@@ -372,7 +397,7 @@ Expression* MatrixAddition::Differentiate() const {
 	}
 }
 
-Expression* MatrixAddition::Vectorize() const {
+ExpressionPtr MatrixAddition::Vectorize() const {
 	if (_lhs->_has_differential && _rhs->_has_differential) {
 		return GetSelfType(_lhs->Vectorize(), _rhs->Vectorize());
 	} else {
@@ -380,11 +405,7 @@ Expression* MatrixAddition::Vectorize() const {
 	}
 }
 
-ExpressionType MatrixProduct::GetExpressionType() const {
-	return ExpressionType::kMatrixProductOp;
-}
-
-Expression* MatrixProduct::GetTransposedDerivative() const {
+ExpressionPtr MatrixProduct::GetTransposedDerivative() const {
 	if (!_lhs->_has_differential && !_rhs->_has_differential) {
 		throw std::logic_error("getting derivatives on expressions without differential");
 	} else if (_lhs->_has_differential && !_rhs->_has_differential) {
@@ -396,14 +417,15 @@ Expression* MatrixProduct::GetTransposedDerivative() const {
 	}
 }
 
-MatrixProduct* MatrixProduct::GetSelfType(
-	Expression *lhs, Expression *rhs
+ExpressionPtr MatrixProduct::GetSelfType(
+	ExpressionPtr lhs, ExpressionPtr rhs
 ) {
 	if (lhs->_cols != rhs->_rows) {
 		throw std::logic_error("the shape of matrices in product does not match");
 	}
-	return new MatrixProduct(
+	return std::make_shared<MatrixProduct>(
 		kMatrixProductPriority,
+		ExpressionType::kMatrixProductOp,
 		"",
 		lhs->_rows, rhs->_cols,
 		lhs->_has_variable || rhs->_has_variable,
@@ -412,11 +434,11 @@ MatrixProduct* MatrixProduct::GetSelfType(
 	);
 }
 
-Expression * MatrixProduct::Clone() const {
+ExpressionPtr MatrixProduct::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-Expression * MatrixProduct::Differentiate() const {
+ExpressionPtr MatrixProduct::Differentiate() const {
 	if (_lhs->_has_variable && !_rhs->_has_variable) {
 		return GetSelfType(_lhs->Differentiate(), _rhs->Clone());
 	}
@@ -432,7 +454,7 @@ Expression * MatrixProduct::Differentiate() const {
 	throw std::logic_error("differentiating a matrix product with no varaible");
 }
 
-Expression * MatrixProduct::Vectorize() const {
+ExpressionPtr MatrixProduct::Vectorize() const {
 	// A * B
 	if (_lhs->_has_differential && _rhs->_has_differential) {
 		throw std::logic_error("differential appears on both sides of matrix product");
@@ -440,7 +462,7 @@ Expression * MatrixProduct::Vectorize() const {
 	if (_lhs->_has_differential && !_rhs->_has_differential) {
 		auto BT = Transpose::GetSelfType(_rhs->Clone());
 		auto BTKronI = KroneckerProduct::GetSelfType(
-			BT, IdentityMatrix::GetIdentityMatrix(_lhs->_rows)
+			BT, IdentityMatrix::GetSelfType(_lhs->_rows)
 		);
 		return MatrixProduct::GetSelfType(
 			BTKronI, _lhs->Vectorize()
@@ -448,7 +470,7 @@ Expression * MatrixProduct::Vectorize() const {
 	}
 	if (!_lhs->_has_differential && _rhs->_has_differential) {
 		auto IKronA = KroneckerProduct::GetSelfType(
-			IdentityMatrix::GetIdentityMatrix(_rhs->_cols), _lhs->Clone()
+			IdentityMatrix::GetSelfType(_rhs->_cols), _lhs->Clone()
 		);
 		return MatrixProduct::GetSelfType(
 			IKronA, _rhs->Vectorize()
@@ -457,13 +479,10 @@ Expression * MatrixProduct::Vectorize() const {
 	throw std::logic_error("vectorizing a matrix product without differentials");
 }
 
-ExpressionType KroneckerProduct::GetExpressionType() const {
-	return ExpressionType::kKroneckerProductOp;
-}
-
-KroneckerProduct* KroneckerProduct::GetSelfType(Expression *lhs, Expression *rhs) {
-	return new KroneckerProduct(
+ExpressionPtr KroneckerProduct::GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs) {
+	return std::make_shared<KroneckerProduct>(
 		kKroneckerProductPriority,
+		ExpressionType::kKroneckerProductOp,
 		"\\otimes",
 		lhs->_rows * rhs->_rows,
 		lhs->_cols * rhs->_cols,
@@ -474,11 +493,11 @@ KroneckerProduct* KroneckerProduct::GetSelfType(Expression *lhs, Expression *rhs
 }
 
 
-Expression * KroneckerProduct::Clone() const {
+ExpressionPtr KroneckerProduct::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-Expression * KroneckerProduct::Differentiate() const {
+ExpressionPtr KroneckerProduct::Differentiate() const {
 	if (_lhs->_has_variable && !_rhs->_has_variable) {
 		return GetSelfType(_lhs->Differentiate(), _rhs->Clone());
 	}
@@ -494,22 +513,22 @@ Expression * KroneckerProduct::Differentiate() const {
 	throw std::logic_error("differentiating a Kronecker product with no varaible");
 }
 
-Expression * KroneckerProduct::Vectorize() const {
+ExpressionPtr KroneckerProduct::Vectorize() const {
 	// A * B
 	if (_lhs->_has_differential && _rhs->_has_differential) {
 		throw std::logic_error("differential appears on both sides of matrix product");
 	}
 	if (!_lhs->_has_differential && _rhs->_has_differential) {
 		auto I_kron_K_kron_I = GetSelfType(
-			IdentityMatrix::GetIdentityMatrix(_lhs->_cols),
+			IdentityMatrix::GetSelfType(_lhs->_cols),
 			GetSelfType(
-				CommutationMatrix::GetCommutationMatrix(_rhs->_cols, _lhs->_rows),
-				IdentityMatrix::GetIdentityMatrix(_rhs->_rows)
+				CommutationMatrix::GetSelfType(_rhs->_cols, _lhs->_rows),
+				IdentityMatrix::GetSelfType(_rhs->_rows)
 			)
 		);
 		auto vec_A_kron_I = GetSelfType(
 			Vectorization::GetSelfType(_lhs->Clone()),
-			IdentityMatrix::GetIdentityMatrix(_rhs->_rows * _rhs->_cols)
+			IdentityMatrix::GetSelfType(_rhs->_rows * _rhs->_cols)
 		);
 		return MatrixProduct::GetSelfType(
 			I_kron_K_kron_I,
@@ -520,19 +539,19 @@ Expression * KroneckerProduct::Vectorize() const {
 	}
 	if (_lhs->_has_differential && !_rhs->_has_differential) {
 		auto K_kron_K = GetSelfType(
-			CommutationMatrix::GetCommutationMatrix(_lhs->_cols, _rhs->_cols),
-			CommutationMatrix::GetCommutationMatrix(_lhs->_rows, _rhs->_rows)
+			CommutationMatrix::GetSelfType(_lhs->_cols, _rhs->_cols),
+			CommutationMatrix::GetSelfType(_lhs->_rows, _rhs->_rows)
 		);
 		auto I_kron_K_kron_I = GetSelfType(
-			IdentityMatrix::GetIdentityMatrix(_rhs->_cols),
+			IdentityMatrix::GetSelfType(_rhs->_cols),
 			GetSelfType(
-				CommutationMatrix::GetCommutationMatrix(_lhs->_cols, _rhs->_rows),
-				IdentityMatrix::GetIdentityMatrix(_lhs->_rows)
+				CommutationMatrix::GetSelfType(_lhs->_cols, _rhs->_rows),
+				IdentityMatrix::GetSelfType(_lhs->_rows)
 			)
 		);
 		auto vec_B_kron_I = GetSelfType(
 			Vectorization::GetSelfType(_rhs->Clone()),
-			IdentityMatrix::GetIdentityMatrix(_lhs->_rows * _lhs->_cols)
+			IdentityMatrix::GetSelfType(_lhs->_rows * _lhs->_cols)
 		);
 		return MatrixProduct::GetSelfType(
 			K_kron_K,
@@ -547,18 +566,15 @@ Expression * KroneckerProduct::Vectorize() const {
 	throw std::logic_error("vectorizing a Kronecker product without differentials");
 }
 
-ExpressionType ScalarMatrixProduct::GetExpressionType() const {
-	return ExpressionType::kScalarMatrixProductOp;
-}
-
-ScalarMatrixProduct* ScalarMatrixProduct::GetSelfType(
-	Expression *scalar, Expression *matrix
+ExpressionPtr ScalarMatrixProduct::GetSelfType(
+	ExpressionPtr scalar, ExpressionPtr matrix
 ) {
 	if (scalar->_rows != 1 || scalar->_cols != 1) {
 		throw std::logic_error("scalar-matrix product with non-scalar");
 	}
-	return new ScalarMatrixProduct(
+	return std::make_shared<ScalarMatrixProduct>(
 		kScalarMatrixProductPriority,
+		ExpressionType::kScalarMatrixProductOp,
 		"*",
 		matrix->_rows, matrix->_cols,
 		scalar->_has_variable || matrix->_has_variable,
@@ -567,11 +583,11 @@ ScalarMatrixProduct* ScalarMatrixProduct::GetSelfType(
 	);
 }
 
-Expression * ScalarMatrixProduct::Clone() const {
+ExpressionPtr ScalarMatrixProduct::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-Expression * ScalarMatrixProduct::Differentiate() const {
+ExpressionPtr ScalarMatrixProduct::Differentiate() const {
 	if (_lhs->_has_variable && !_rhs->_has_variable) {
 		return GetSelfType(_lhs->Differentiate(), _rhs->Clone());
 	}
@@ -587,7 +603,7 @@ Expression * ScalarMatrixProduct::Differentiate() const {
 	throw std::logic_error("differentiating a scalar-matrix product with no varaible");
 }
 
-Expression * ScalarMatrixProduct::Vectorize() const {
+ExpressionPtr ScalarMatrixProduct::Vectorize() const {
 	// a * B
 	if (_lhs->_has_differential && _rhs->_has_differential) {
 		throw std::logic_error("differential appears on both sides of scalar-matrix product");
@@ -600,13 +616,70 @@ Expression * ScalarMatrixProduct::Vectorize() const {
 	}
 	if (!_lhs->_has_differential && _rhs->_has_differential) {
 		return MatrixProduct::GetSelfType(
-			KroneckerProduct::GetSelfType(_lhs->Clone(), IdentityMatrix::GetIdentityMatrix(_rhs->_rows * _rhs->_cols)),
+			KroneckerProduct::GetSelfType(_lhs->Clone(), IdentityMatrix::GetSelfType(_rhs->_rows * _rhs->_cols)),
 			_rhs->Vectorize()
 		);
 	}
 	throw std::logic_error("vectorizing a scalar-matrix product without differentials");
 }
 
+ExpressionPtr HadamardProduct::Clone() const {
+	return GetSelfType(_lhs->Clone(), _rhs->Clone());
+}
+
+ExpressionPtr HadamardProduct::Differentiate() const {
+	if (_lhs->_has_variable && _rhs->_has_variable) {
+		return MatrixAddition::GetSelfType(
+			HadamardProduct::GetSelfType(_rhs->Clone(), _lhs->Differentiate()),
+			HadamardProduct::GetSelfType(_lhs->Clone(), _rhs->Differentiate())
+		);
+	} else if (_lhs->_has_variable && !_rhs->_has_variable) {
+		return HadamardProduct::GetSelfType(_rhs->Clone(), _lhs->Differentiate());
+	} else if (!_lhs->_has_variable && _rhs->_has_variable) {
+		return HadamardProduct::GetSelfType(_lhs->Clone(), _rhs->Differentiate());
+	} else {
+		throw std::logic_error("differentiating a hadamard product with no variable");
+	}
+}
+
+ExpressionPtr HadamardProduct::Vectorize() const {
+	if (_lhs->_has_differential && !_rhs->_has_differential) {
+		return MatrixProduct::GetSelfType(
+			Diagonalization::GetSelfType(
+				Vectorization::GetSelfType(
+					_rhs->Clone()
+				)
+			),
+			_lhs->Vectorize()
+		);
+	} else if (!_lhs->_has_differential && _rhs->_has_differential) {
+		return MatrixProduct::GetSelfType(
+			Diagonalization::GetSelfType(
+				Vectorization::GetSelfType(
+					_lhs->Clone()
+				)
+			),
+			_rhs->Vectorize()
+		);
+	} else if (!_lhs->_has_differential && !_rhs->_has_differential) {
+		throw std::logic_error("vectorizing a hadamard product without differential");
+	} else {
+		throw std::logic_error("differential appears on both sides of hadarmard product");
+	}
+}
+
+ExpressionPtr HadamardProduct::GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs) {
+	assert(lhs->_rows == rhs->_rows && lhs->_cols == rhs->_cols);
+	return std::make_shared<HadamardProduct> (
+		kHadamardProductPriority,
+		ExpressionType::kHadamardProductOp,
+		"\\odot",
+		lhs->_rows, lhs->_cols,
+		lhs->_has_variable || rhs->_has_variable,
+		lhs->_has_differential || rhs->_has_differential,
+		lhs, rhs
+	);
+}
 
 void LeafExpression::MarkVariable(unsigned int uuid) {
 	_has_variable = false;
@@ -614,39 +687,31 @@ void LeafExpression::MarkVariable(unsigned int uuid) {
 
 void LeafExpression::MarkDifferential() {}
 
-ExpressionType IdentityMatrix::GetExpressionType() const {
-	return ExpressionType::kIdentityMatrix;
-}
-
-IdentityMatrix* IdentityMatrix::GetIdentityMatrix(int order) {
-	return new IdentityMatrix(order, order, false, false, order);
+ExpressionPtr IdentityMatrix::GetSelfType(int order) {
+	return std::make_shared<IdentityMatrix>(order, order, false, false, order);
 }
 
 void IdentityMatrix::Print(std::ostream &out) const {
 	out << "I_{" << _order << "}";
 }
 
-Expression * IdentityMatrix::Clone() const {
-	return GetIdentityMatrix(_order);
+ExpressionPtr IdentityMatrix::Clone() const {
+	return GetSelfType(_order);
 }
 
-Expression * IdentityMatrix::Differentiate() const {
+ExpressionPtr IdentityMatrix::Differentiate() const {
 	throw std::logic_error("differentiating an identity matrix");
 }
 
-Expression * IdentityMatrix::Vectorize() const {
+ExpressionPtr IdentityMatrix::Vectorize() const {
 	throw std::logic_error("vectorizing an identity matrix");
 }
 
-ExpressionType CommutationMatrix::GetExpressionType() const {
-	return ExpressionType::kCommutationMatrix;
-}
-
-Expression* CommutationMatrix::GetCommutationMatrix(int m, int n) {
+ExpressionPtr CommutationMatrix::GetSelfType(int m, int n) {
 	if (m == 1 || n == 1) {
-		return IdentityMatrix::GetIdentityMatrix(m * n);
+		return IdentityMatrix::GetSelfType(m * n);
 	} else {
-		return new CommutationMatrix(
+		return std::make_shared<CommutationMatrix>(
 			m * n, m * n,
 			false, false, m, n
 		);
@@ -657,60 +722,72 @@ void CommutationMatrix::Print(std::ostream &out) const {
 	out << "K_{" << _m << ", " << _n << "}";
 }
 
-Expression * CommutationMatrix::Clone() const {
-	return GetCommutationMatrix(_m, _n);
+ExpressionPtr CommutationMatrix::Clone() const {
+	return GetSelfType(_m, _n);
 }
 
-Expression * CommutationMatrix::Differentiate() const {
+ExpressionPtr CommutationMatrix::Differentiate() const {
 	throw std::logic_error("differentiating a commutation matrix");
 }
 
-Expression * CommutationMatrix::Vectorize() const {
+ExpressionPtr CommutationMatrix::Vectorize() const {
 	throw std::logic_error("vectorizing a commutation matrix");
 }
 
-ExpressionType ScalarConstant::GetExpressionType() const {
-	return ExpressionType::kScalarConstant;
+ExpressionPtr DiagonalizationMatrix::GetSelfType(int order) {
+	return std::make_shared<DiagonalizationMatrix>(order * order, order, false, false, order);
 }
 
-ScalarConstant* ScalarConstant::GetScalarConstant(double value) {
-	return new ScalarConstant(1, 1, false, false, value);
+void DiagonalizationMatrix::Print(std::ostream &out) const {
+	out << "D_{" << _order << "}";
 }
 
-void ScalarConstant::Print(std::ostream &out) const {
+ExpressionPtr DiagonalizationMatrix::Clone() const {
+	return GetSelfType(_order);
+}
+
+ExpressionPtr DiagonalizationMatrix::Differentiate() const {
+	throw std::logic_error("differenticating diagonalization matrix");
+}
+
+ExpressionPtr DiagonalizationMatrix::Vectorize() const {
+	throw std::logic_error("vectorizing diagonalization matrix");
+}
+
+ExpressionPtr Constant::GetSelfType(double value) {
+	return std::make_shared<Constant>(1, 1, false, false, value);
+}
+
+void Constant::Print(std::ostream &out) const {
 	out << _value;
 }
 
-Expression * ScalarConstant::Clone() const {
-	return ScalarConstant::GetScalarConstant(_value);
+ExpressionPtr Constant::Clone() const {
+	return Constant::GetSelfType(_value);
 }
 
-Expression * ScalarConstant::Differentiate() const {
+ExpressionPtr Constant::Differentiate() const {
 	throw std::logic_error("differentiating a scalar constant");
 }
 
-Expression * ScalarConstant::Vectorize() const {
+ExpressionPtr Constant::Vectorize() const {
 	throw std::logic_error("vectorizing a scalar constant");
-}
-
-ExpressionType Variable::GetExpressionType() const {
-	return ExpressionType::kVariable;
 }
 
 void Variable::MarkVariable(unsigned int uuid) {
 	_has_variable = (uuid == _uuid);
 }
 
-Expression* Variable::GetTransposedDerivative() const {
+ExpressionPtr Variable::GetTransposedDerivative() const {
 	if (_has_differential) {
-		return IdentityMatrix::GetIdentityMatrix(_rows);
+		return IdentityMatrix::GetSelfType(_rows);
 	} else {
 		throw std::logic_error("getting derivatives on expressions without differential");
 	}
 }
 
-Variable* Variable::GetVariable(const std::string &name, unsigned int uuid, int rows, int cols) {
-	return new Variable(rows, cols, false, false, name, uuid);
+std::shared_ptr<Variable> Variable::GetSelfType(const std::string &name, unsigned int uuid, int rows, int cols) {
+	return std::make_shared<Variable>(rows, cols, false, false, name, uuid);
 }
 
 void Variable::Print(std::ostream &out) const {
@@ -720,18 +797,18 @@ void Variable::Print(std::ostream &out) const {
 	out << _name;
 }
 
-Expression * Variable::Clone() const {
-	return new Variable(_rows, _cols, _has_variable, _has_differential, _name, _uuid);
+ExpressionPtr Variable::Clone() const {
+	return std::make_shared<Variable>(_rows, _cols, _has_variable, _has_differential, _name, _uuid);
 }
 
-Expression * Variable::Differentiate() const {
-	auto new_var = GetVariable(_name, _uuid, _rows, _cols);
+ExpressionPtr Variable::Differentiate() const {
+	auto new_var = GetSelfType(_name, _uuid, _rows, _cols);
 	new_var->_has_differential = true;
 	return new_var;
 }
 
-Expression * Variable::Vectorize() const {
-	return new Variable(_rows * _cols, 1, _has_variable, _has_differential, _name, _uuid);
+ExpressionPtr Variable::Vectorize() const {
+	return std::make_shared<Variable>(_rows * _cols, 1, _has_variable, _has_differential, _name, _uuid);
 }
 
 std::ostream& operator<<(std::ostream& out, const Expression& expr) {
@@ -781,6 +858,14 @@ Eigen::MatrixXd ScalarPower::SlowEvaluation(const VariableTable& table) const {
 	return (Eigen::MatrixXd(1, 1) << std::pow(child_result(0, 0), _power)).finished();
 }
 
+Eigen::MatrixXd Diagonalization::SlowEvaluation(const VariableTable &table) const {
+	return _child->SlowEvaluation(table).asDiagonal();
+}
+
+Eigen::MatrixXd Exp::SlowEvaluation(const VariableTable &table) const {
+	return _child->SlowEvaluation(table).array().exp();
+}
+
 Eigen::MatrixXd MatrixAddition::SlowEvaluation(const VariableTable& table) const {
 	return _lhs->SlowEvaluation(table) + _rhs->SlowEvaluation(table);
 }
@@ -800,6 +885,10 @@ Eigen::MatrixXd ScalarMatrixProduct::SlowEvaluation(const VariableTable& table) 
 	return _lhs->SlowEvaluation(table)(0, 0) * _rhs->SlowEvaluation(table);
 }
 
+Eigen::MatrixXd HadamardProduct::SlowEvaluation(const VariableTable &table) const {
+	return _lhs->SlowEvaluation(table).cwiseProduct(_rhs->SlowEvaluation(table));
+}
+
 Eigen::MatrixXd IdentityMatrix::SlowEvaluation(const VariableTable& table) const {
 	return Eigen::MatrixXd::Identity(_order, _order);
 }
@@ -808,7 +897,15 @@ Eigen::MatrixXd CommutationMatrix::SlowEvaluation(const VariableTable& table) co
 	return Numerics::GetPermutationMatrix(_m, _n);
 }
 
-Eigen::MatrixXd ScalarConstant::SlowEvaluation(const VariableTable& table) const {
+Eigen::MatrixXd DiagonalizationMatrix::SlowEvaluation(const VariableTable &table) const {
+	Eigen::MatrixXd D = Eigen::MatrixXd::Zero(_rows, _cols);
+	for (int i = 0; i < _order; i++) {
+		D(i * _order + i, i) = 1;
+	}
+	return D;
+}
+
+Eigen::MatrixXd Constant::SlowEvaluation(const VariableTable& table) const {
 	return (Eigen::MatrixXd(1, 1) << _value).finished();
 }
 
@@ -822,6 +919,19 @@ Eigen::MatrixXd Variable::SlowEvaluation(const VariableTable& table) const {
 		}
 		return itr->second;
 	}
+}
+
+Eigen::MatrixXd GetExpressionNumericDerivative(
+	const TMD::ExpressionPtr expression,
+	const TMD::VariableTable& table,
+	unsigned int uuid
+) {
+	TMD::VariableTable tmp_table = table;
+	auto func = [&tmp_table, &expression, uuid] (const Eigen::MatrixXd X) -> Eigen::MatrixXd {
+		tmp_table[uuid] = X;
+		return expression->SlowEvaluation(tmp_table);
+	};
+	return Numerics::MatrixGradient<Eigen::MatrixXd, Eigen::MatrixXd>(func, table.at(uuid), 1e-4);
 }
 
 #endif

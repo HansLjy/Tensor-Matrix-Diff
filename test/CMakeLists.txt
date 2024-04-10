@@ -10,3 +10,6 @@ include(GoogleTest)
 gtest_discover_tests(test)
 target_link_libraries(test PRIVATE GTest::gtest_main)
 target_link_libraries(test PRIVATE Numerics)
+
+add_executable(example example.cc)
+target_link_libraries(example PRIVATE TMD)

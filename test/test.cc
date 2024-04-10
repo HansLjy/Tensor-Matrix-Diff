@@ -9,16 +9,16 @@ void GetDoubleOpDerivatives(
 	int A_rows, int A_cols,
 	int B_rows, int B_cols,
 	double step,
-	TMD::Expression*& AxB,
-	TMD::Expression*& gradient_A,
-	TMD::Expression*& gradient_B,
+	TMD::ExpressionPtr& AxB,
+	TMD::ExpressionPtr& gradient_A,
+	TMD::ExpressionPtr& gradient_B,
 	Eigen::MatrixXd& numeric_gradient_A,
 	Eigen::MatrixXd& analytic_gradient_A,
 	Eigen::MatrixXd& numeric_gradient_B,
 	Eigen::MatrixXd& analytic_gradient_B
 ) {
-	auto A = TMD::Variable::GetVariable("A", TMD::UUIDGenerator::GenUUID(), A_rows, A_cols);
-	auto B = TMD::Variable::GetVariable("B", TMD::UUIDGenerator::GenUUID(), B_rows, B_cols);
+	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), A_rows, A_cols);
+	auto B = TMD::Variable::GetSelfType("B", TMD::UUIDGenerator::GenUUID(), B_rows, B_cols);
 	AxB = Op::GetSelfType(A, B);
 	gradient_A = TMD::GetDerivative(AxB, A->_uuid);
 	gradient_B = TMD::GetDerivative(AxB, B->_uuid);
@@ -52,7 +52,7 @@ void GetDoubleOpDerivatives(
 }
 
 TEST(DerivativeTest, MatrixAdditionTest) {
-	TMD::Expression* AxB = nullptr, *gradient_A = nullptr, *gradient_B = nullptr;
+	TMD::ExpressionPtr AxB, gradient_A, gradient_B;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A, numeric_gradient_B, analytic_gradient_B;
 	GetDoubleOpDerivatives<TMD::MatrixAddition>(
 		3, 4,
@@ -64,14 +64,10 @@ TEST(DerivativeTest, MatrixAdditionTest) {
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
 	EXPECT_LT((numeric_gradient_B - analytic_gradient_B).norm(), 1e-4);
-
-	delete AxB;
-	delete gradient_A;
-	delete gradient_B;
 }
 
 TEST(DerivativeTest, MatrixProductTest) {
-	TMD::Expression* AxB = nullptr, *gradient_A = nullptr, *gradient_B = nullptr;
+	TMD::ExpressionPtr AxB, gradient_A, gradient_B;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A, numeric_gradient_B, analytic_gradient_B;
 	GetDoubleOpDerivatives<TMD::MatrixProduct>(
 		3, 4,
@@ -83,14 +79,10 @@ TEST(DerivativeTest, MatrixProductTest) {
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
 	EXPECT_LT((numeric_gradient_B - analytic_gradient_B).norm(), 1e-4);
-
-	delete AxB;
-	delete gradient_A;
-	delete gradient_B;
 }
 
 TEST(DerivativeTest, KroneckerProductTest) {
-	TMD::Expression* AxB = nullptr, *gradient_A = nullptr, *gradient_B = nullptr;
+	TMD::ExpressionPtr AxB, gradient_A, gradient_B;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A, numeric_gradient_B, analytic_gradient_B;
 	GetDoubleOpDerivatives<TMD::KroneckerProduct>(
 		3, 4,
@@ -102,14 +94,10 @@ TEST(DerivativeTest, KroneckerProductTest) {
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
 	EXPECT_LT((numeric_gradient_B - analytic_gradient_B).norm(), 1e-4);
-
-	delete AxB;
-	delete gradient_A;
-	delete gradient_B;
 }
 
 TEST(DerivativeTest, ScalarMatrixProductTest) {
-	TMD::Expression* AxB = nullptr, *gradient_A = nullptr, *gradient_B = nullptr;
+	TMD::ExpressionPtr AxB, gradient_A, gradient_B;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A, numeric_gradient_B, analytic_gradient_B;
 	GetDoubleOpDerivatives<TMD::ScalarMatrixProduct>(
 		1, 1,
@@ -121,22 +109,33 @@ TEST(DerivativeTest, ScalarMatrixProductTest) {
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
 	EXPECT_LT((numeric_gradient_B - analytic_gradient_B).norm(), 1e-4);
+}
 
-	delete AxB;
-	delete gradient_A;
-	delete gradient_B;
+TEST(DerivativeTest, HadamardProductTest) {
+	TMD::ExpressionPtr AxB, gradient_A, gradient_B;
+	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A, numeric_gradient_B, analytic_gradient_B;
+	GetDoubleOpDerivatives<TMD::HadamardProduct>(
+		4, 5,
+		4, 5,
+		1e-4,
+		AxB, gradient_A, gradient_B,
+		numeric_gradient_A, analytic_gradient_A,
+		numeric_gradient_B, analytic_gradient_B
+	);
+	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
+	EXPECT_LT((numeric_gradient_B - analytic_gradient_B).norm(), 1e-4);
 }
 
 template<class Op>
 void GetSingleOpDerivative(
 	int A_rows, int A_cols,
 	double step,
-	TMD::Expression*& op_A,
-	TMD::Expression*& gradient_A,
+	TMD::ExpressionPtr& op_A,
+	TMD::ExpressionPtr& gradient_A,
 	Eigen::MatrixXd& numeric_gradient_A,
 	Eigen::MatrixXd& analytic_gradient_A
 ) {
-	auto A = TMD::Variable::GetVariable("A", TMD::UUIDGenerator::GenUUID(), A_rows, A_cols);
+	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), A_rows, A_cols);
 	op_A = Op::GetSelfType(A);
 	gradient_A = TMD::GetDerivative(op_A, A->_uuid);
 	
@@ -155,7 +154,7 @@ void GetSingleOpDerivative(
 }
 
 TEST(DerivativeTest, NegateTest) {
-	TMD::Expression* op_A = nullptr, *gradient_A = nullptr;
+	TMD::ExpressionPtr op_A, gradient_A;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
 	GetSingleOpDerivative<TMD::Negate>(
 		3, 4,
@@ -164,13 +163,10 @@ TEST(DerivativeTest, NegateTest) {
 		numeric_gradient_A, analytic_gradient_A
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
-
-	delete op_A;
-	delete gradient_A;
 }
 
 TEST(DerivativeTest, InverseTest) {
-	TMD::Expression* op_A = nullptr, *gradient_A = nullptr;
+	TMD::ExpressionPtr op_A, gradient_A;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
 	GetSingleOpDerivative<TMD::Inverse>(
 		4, 4,
@@ -179,13 +175,10 @@ TEST(DerivativeTest, InverseTest) {
 		numeric_gradient_A, analytic_gradient_A
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).lpNorm<Eigen::Infinity>(), 1e-4);
-
-	delete op_A;
-	delete gradient_A;
 }
 
 TEST(DerivativeTest, DeterminantTest) {
-	TMD::Expression* op_A = nullptr, *gradient_A = nullptr;
+	TMD::ExpressionPtr op_A, gradient_A;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
 	GetSingleOpDerivative<TMD::Determinant>(
 		4, 4,
@@ -194,13 +187,10 @@ TEST(DerivativeTest, DeterminantTest) {
 		numeric_gradient_A, analytic_gradient_A
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
-
-	delete op_A;
-	delete gradient_A;
 }
 
 TEST(DerivativeTest, VectorizationTest) {
-	TMD::Expression* op_A = nullptr, *gradient_A = nullptr;
+	TMD::ExpressionPtr op_A, gradient_A;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
 	GetSingleOpDerivative<TMD::Vectorization>(
 		3, 4,
@@ -209,13 +199,10 @@ TEST(DerivativeTest, VectorizationTest) {
 		numeric_gradient_A, analytic_gradient_A
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
-
-	delete op_A;
-	delete gradient_A;
 }
 
 TEST(DerivativeTest, TransposeTest) {
-	TMD::Expression* op_A = nullptr, *gradient_A = nullptr;
+	TMD::ExpressionPtr op_A, gradient_A;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
 	GetSingleOpDerivative<TMD::Transpose>(
 		3, 4,
@@ -224,16 +211,13 @@ TEST(DerivativeTest, TransposeTest) {
 		numeric_gradient_A, analytic_gradient_A
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
-
-	delete op_A;
-	delete gradient_A;
 }
 
 TEST(DerivativeTest, ScalarPowerTest) {
-	TMD::Expression* op_A = nullptr, *gradient_A = nullptr;
+	TMD::ExpressionPtr op_A, gradient_A;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
 
-	auto A = TMD::Variable::GetVariable("A", TMD::UUIDGenerator::GenUUID(), 1, 1);
+	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), 1, 1);
 	op_A = TMD::ScalarPower::GetSelfType(A, 1.5);
 	gradient_A = TMD::GetDerivative(op_A, A->_uuid);
 	
@@ -251,8 +235,28 @@ TEST(DerivativeTest, ScalarPowerTest) {
 	analytic_gradient_A = gradient_A->SlowEvaluation(table);
 
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
-
-	delete op_A;
-	delete gradient_A;
 }
 
+TEST(DerivativeTest, ExpTest) {
+	TMD::ExpressionPtr op_A, gradient_A;
+	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
+	GetSingleOpDerivative<TMD::Exp>(
+		3, 4,
+		1e-8,
+		op_A, gradient_A,
+		numeric_gradient_A, analytic_gradient_A
+	);
+	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
+}
+
+TEST(DerivativeTest, DiagonalizeTest) {
+	TMD::ExpressionPtr op_A, gradient_A;
+	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
+	GetSingleOpDerivative<TMD::Diagonalization>(
+		4, 1,
+		1e-4,
+		op_A, gradient_A,
+		numeric_gradient_A, analytic_gradient_A
+	);
+	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
+}
