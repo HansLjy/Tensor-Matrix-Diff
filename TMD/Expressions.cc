@@ -30,6 +30,35 @@ ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variabl
 	return result;
 }
 
+std::string Expression::ExportGraph() const {
+	std::stringstream out;
+
+	out << "% !TeX TXS-program:compile = txs:///pdflatex/[--shell-escape]" << std::endl;
+	out << "\\documentclass{standalone}" << std::endl
+	    << "\\usepackage[psfrag]{graphviz}" << std::endl
+		<< "\\usepackage{auto-pst-pdf}" << std::endl
+		<< "\\usepackage{psfrag}" << std::endl;
+	
+	out << "\\begin{document}" << std::endl;
+
+	std::vector<std::string> labels;
+	std::stringstream real_out;
+	RealExportGraph(labels, real_out);
+
+	for (unsigned int i = 0; i < labels.size(); i++) {
+		out << "\\psfrag{" << "label" << i << "}[cc][cc]{$"
+			<< labels[i] << "$}" << std::endl;
+	}
+
+	out << "\\digraph{abc}{" << std::endl;
+	out << real_out.str();
+	out << "}" << std::endl;
+
+	out << "\\end{document}" << std::endl;
+
+	return out.str();
+}
+
 ExpressionPtr Expression::GetTransposedDerivative() const {
 	throw std::logic_error("should be copying instead of getting derivative");
 }
@@ -44,10 +73,17 @@ void SingleOpExpression::MarkDifferential() {
 	_has_differential = _child->_has_differential;
 }
 
+void SingleOpExpression::RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const {
+	unsigned int cur_node_id = labels.size();
+	out << "nd" << cur_node_id << "[label = label" << cur_node_id << "]" << std::endl;
+	labels.push_back(_operator_sym);
+	unsigned int child_node_id = labels.size();
+	_child->RealExportGraph(labels, out);
+	out << "nd" << cur_node_id << " -> " << "nd" << child_node_id << ";" << std::endl;
+}
+
 ExpressionPtr Negate::GetSelfType(ExpressionPtr child) {
 	return std::make_shared<Negate>(
-		kNegatePriority,
-		ExpressionType::kNegateOp,
 		child->_rows, child->_cols,
 		child->_has_variable, child->_has_differential,
 		child
@@ -98,8 +134,6 @@ void Inverse::Print(std::ostream &out) const {
 ExpressionPtr Inverse::GetSelfType(ExpressionPtr child) {
 	assert(child->_rows == child->_cols);
 	return std::make_shared<Inverse>(
-		kInversePriority,
-		ExpressionType::kInverseOp,
 		child->_rows, child->_cols,
 		child->_has_variable, child->_has_differential,
 		child
@@ -126,7 +160,9 @@ ExpressionPtr Inverse::Vectorize() const {
 ExpressionPtr Determinant::GetSelfType(ExpressionPtr child) {
 	assert(child->_rows == child->_cols);
 	return std::make_shared<Determinant>(
-		kDeterminantPriority, ExpressionType::kDeterminantOp, 1, 1, child->_has_variable, child->_has_differential, child
+		1, 1,
+		child->_has_variable, child->_has_differential,
+		child
 	);
 }
 
@@ -162,7 +198,9 @@ ExpressionPtr Determinant::Vectorize() const {
 
 ExpressionPtr Vectorization::GetSelfType(ExpressionPtr child) {
 	return std::make_shared<Vectorization> (
-		kVectorizationPriority, ExpressionType::kVectorizationOp, child->_rows * child->_cols, 1, child->_has_variable, child->_has_differential, child
+		child->_rows * child->_cols, 1,
+		child->_has_variable, child->_has_differential,
+		child
 	);
 }
 
@@ -191,7 +229,9 @@ ExpressionPtr Vectorization::Vectorize() const {
 
 ExpressionPtr Transpose::GetSelfType(ExpressionPtr child) {
 	return std::make_shared<Transpose>(
-		kTransposePriority, ExpressionType::kTransposeOp, child->_cols, child->_rows, child->_has_variable, child->_has_differential, child
+		child->_cols, child->_rows,
+		child->_has_variable, child->_has_differential,
+		child
 	);
 }
 
@@ -220,51 +260,8 @@ ExpressionPtr Transpose::Vectorize() const {
 	return MatrixProduct::GetSelfType(K, vec_child);
 }
 
-ExpressionPtr ScalarPower::GetSelfType(ExpressionPtr child, double power) {
-	assert(child->_rows == 1 && child->_cols == 1);
-	return std::make_shared<ScalarPower>(
-		kScalarPowerPriority,
-		ExpressionType::kScalarPowerOp,
-		1, 1,
-		child->_has_variable,
-		child->_has_differential,
-		child, power
-	);
-}
-
-void ScalarPower::Print(std::ostream &out) const {
-	if (_child->_priority > _priority) {
-		_child->Print(out);
-		out << "^" << _power;
-	} else {
-		out << "\\left(";
-		_child->Print(out);
-		out << "\\right)^{" << _power << "}";
-	}
-}
-
-ExpressionPtr ScalarPower::Clone() const {
-	return GetSelfType(_child->Clone(), _power);
-}
-
-ExpressionPtr ScalarPower::Differentiate() const {
-	auto power = Constant::GetSelfType(_power);
-	ExpressionPtr mult;
-	if (std::abs(_power - 1) < eps) {
-		mult  = _child->Differentiate();
-	} else {
-		auto child_power_m_1 = GetSelfType(_child->Clone(), _power - 1);
-		mult = ScalarMatrixProduct::GetSelfType(child_power_m_1, _child->Differentiate());
-	}
-	return ScalarMatrixProduct::GetSelfType(power, mult);
-}
-
-ExpressionPtr ScalarPower::Vectorize() const {
-	throw std::logic_error("vectorizing the scalar power");
-}
-
 void Diagonalization::Print(std::ostream &out) const {
-	out << "diag \\left(";
+	out << "\\text{diag} \\left(";
 	_child->Print(out);
 	out << "\\right)";
 }
@@ -287,7 +284,6 @@ ExpressionPtr Diagonalization::Vectorize() const {
 ExpressionPtr Diagonalization::GetSelfType(ExpressionPtr child) {
 	assert(child->_cols == 1);
 	return std::make_shared<Diagonalization>(
-		kDiagonalizePriority, ExpressionType::kDiagonalizeOp,
 		child->_rows, child->_rows,
 		child->_has_variable, child->_has_differential,
 		child
@@ -316,7 +312,11 @@ ExpressionPtr Exp::Vectorize() const {
 }
 
 ExpressionPtr Exp::GetSelfType(ExpressionPtr child) {
-	return std::make_shared<Exp>(kExpPriority, ExpressionType::kExpOp, child->_rows, child->_cols, child->_has_variable, child->_has_differential, child);
+	return std::make_shared<Exp>(
+		child->_rows, child->_cols,
+		child->_has_variable, child->_has_differential,
+		child
+	);
 }
 
 void DoubleOpExpression::MarkVariable(unsigned int uuid) {
@@ -331,6 +331,18 @@ void DoubleOpExpression::MarkDifferential() {
 	_has_differential = (_lhs->_has_differential || _rhs->_has_differential);
 }
 
+void DoubleOpExpression::RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const {
+	unsigned int cur_node_id = labels.size();
+	out << "nd" << cur_node_id << "[label = label" << cur_node_id << "]" << std::endl;
+	labels.push_back(_operator_sym);
+	unsigned int lhs_node_id = labels.size();
+	_lhs->RealExportGraph(labels, out);
+	unsigned int rhs_node_id = labels.size();
+	_rhs->RealExportGraph(labels, out);
+	out << "nd" << cur_node_id << " -> " << "nd" << lhs_node_id << ";" << std::endl;
+	out << "nd" << cur_node_id << " -> " << "nd" << rhs_node_id << ";" << std::endl;
+}
+
 void DoubleOpExpression::Print(std::ostream &out) const {
 	if (_lhs->_priority >= _priority) {
 		_lhs->Print(out);
@@ -339,8 +351,8 @@ void DoubleOpExpression::Print(std::ostream &out) const {
 		_lhs->Print(out);
 		out << "\\right)";
 	}
-	if (_operator_sign.length() > 0) {
-		out << " " << _operator_sign << " ";
+	if (_operator_sym.length() > 0) {
+		out << " " << _operator_sym << " ";
 	}
 	if (_rhs->_priority > _priority) {
 		_rhs->Print(out);
@@ -426,7 +438,7 @@ ExpressionPtr MatrixProduct::GetSelfType(
 	return std::make_shared<MatrixProduct>(
 		kMatrixProductPriority,
 		ExpressionType::kMatrixProductOp,
-		"",
+		" ",
 		lhs->_rows, rhs->_cols,
 		lhs->_has_variable || rhs->_has_variable,
 		lhs->_has_differential || rhs->_has_differential,
@@ -623,6 +635,60 @@ ExpressionPtr ScalarMatrixProduct::Vectorize() const {
 	throw std::logic_error("vectorizing a scalar-matrix product without differentials");
 }
 
+ExpressionPtr MatrixScalarPower::GetSelfType(
+	ExpressionPtr matrix, ExpressionPtr power
+) {
+	if (power->_rows != 1 || power->_cols != 1) {
+		throw std::logic_error("power is not a scalar");
+	}
+	return std::make_shared<MatrixScalarPower>(
+		kMatrixScalarPowerPriority,
+		ExpressionType::kMatrixScalarPower,
+		"\\text{pow}",
+		matrix->_rows, matrix->_cols,
+		matrix->_has_variable, matrix->_has_differential,
+		matrix, power
+	);
+}
+
+void MatrixScalarPower::Print(std::ostream &out) const {
+	out << "\\left(";
+	_lhs->Print(out);
+	out << "\\right)^{";
+	_rhs->Print(out);
+	out << "}";
+}
+
+ExpressionPtr MatrixScalarPower::Clone() const {
+	return GetSelfType(_lhs->Clone(), _rhs->Clone());
+}
+
+ExpressionPtr MatrixScalarPower::Differentiate() const {
+	ExpressionPtr power_minus_1;
+	if (_rhs->_type == ExpressionType::kRationalScalarConstant) {
+		std::shared_ptr<RationalScalarConstant> rhs_copy = 
+			std::dynamic_pointer_cast<RationalScalarConstant>(_rhs->Clone());
+		rhs_copy->_value += -1;
+		power_minus_1 = rhs_copy;
+	} else {
+		power_minus_1 = MatrixAddition::GetSelfType(
+			_rhs->Clone(),
+			RationalScalarConstant::GetSelfType(-1)
+		);
+	}
+	return HadamardProduct::GetSelfType(
+		ScalarMatrixProduct::GetSelfType(
+			_rhs->Clone(),
+			GetSelfType(_lhs, power_minus_1)
+		),
+		_lhs->Differentiate()
+	);
+}
+
+ExpressionPtr MatrixScalarPower::Vectorize() const {
+	throw std::logic_error("vectorizing a matrix scalar power");
+}
+
 ExpressionPtr HadamardProduct::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
@@ -686,6 +752,14 @@ void LeafExpression::MarkVariable(unsigned int uuid) {
 }
 
 void LeafExpression::MarkDifferential() {}
+
+void LeafExpression::RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const {
+	unsigned int cur_node_id = labels.size();
+	std::stringstream cur_out;
+	Print(cur_out);
+	labels.push_back(cur_out.str());
+	out << "nd" << cur_node_id << "[label = label" << cur_node_id << "]" << std::endl;
+}
 
 ExpressionPtr IdentityMatrix::GetSelfType(int order) {
 	return std::make_shared<IdentityMatrix>(order, order, false, false, order);
@@ -754,23 +828,60 @@ ExpressionPtr DiagonalizationMatrix::Vectorize() const {
 	throw std::logic_error("vectorizing diagonalization matrix");
 }
 
-ExpressionPtr Constant::GetSelfType(double value) {
-	return std::make_shared<Constant>(1, 1, false, false, value);
+int gcd(int a, int b) {
+	return b > 0 ? gcd(b, a % b) : a;
 }
 
-void Constant::Print(std::ostream &out) const {
+RationalScalarConstant::RationalNumber::RationalNumber(int val): _p(val), _q(1){}
+RationalScalarConstant::RationalNumber::RationalNumber(int p, int q): _p(p), _q(q){}
+
+RationalScalarConstant::RationalNumber&
+RationalScalarConstant::RationalNumber::operator+=(const RationalNumber &rhs) {
+	int new_p = _p * rhs._q + _q * rhs._p;
+	int new_q = _q * rhs._q;
+
+	int gcd_pq = gcd(std::abs(new_p), new_q);
+	_p = new_p / gcd_pq;
+	_q = new_q / gcd_pq;
+	return *this;
+}
+
+RationalScalarConstant::RationalNumber::operator double() const {
+	return double(_p) / double(_q);
+}
+
+std::ostream& operator<<(std::ostream& out, const RationalScalarConstant::RationalNumber& r) {
+	if (r._q == 1) {
+		out << r._p;
+	} else {
+		if (r._p == 0) {
+			out << "0";
+		} else if (r._p > 0) {
+			out << "\\frac{" << r._p << "}{" << r._q << "}";
+		} else {
+			out << "-\\frac{" << -r._p << "}{" << r._q << "}";
+		}
+	}
+	return out;
+}
+
+ExpressionPtr RationalScalarConstant::GetSelfType(const RationalNumber& value) {
+	return std::make_shared<RationalScalarConstant>(1, 1, false, false, value);
+}
+
+void RationalScalarConstant::Print(std::ostream &out) const {
 	out << _value;
 }
 
-ExpressionPtr Constant::Clone() const {
-	return Constant::GetSelfType(_value);
+ExpressionPtr RationalScalarConstant::Clone() const {
+	return RationalScalarConstant::GetSelfType(_value);
 }
 
-ExpressionPtr Constant::Differentiate() const {
+ExpressionPtr RationalScalarConstant::Differentiate() const {
 	throw std::logic_error("differentiating a scalar constant");
 }
 
-ExpressionPtr Constant::Vectorize() const {
+ExpressionPtr RationalScalarConstant::Vectorize() const {
 	throw std::logic_error("vectorizing a scalar constant");
 }
 
@@ -853,11 +964,6 @@ Eigen::MatrixXd Transpose::SlowEvaluation(const VariableTable& table) const {
 	return _child->SlowEvaluation(table).transpose();
 }
 
-Eigen::MatrixXd ScalarPower::SlowEvaluation(const VariableTable& table) const {
-	auto child_result = _child->SlowEvaluation(table);
-	return (Eigen::MatrixXd(1, 1) << std::pow(child_result(0, 0), _power)).finished();
-}
-
 Eigen::MatrixXd Diagonalization::SlowEvaluation(const VariableTable &table) const {
 	return _child->SlowEvaluation(table).asDiagonal();
 }
@@ -885,6 +991,10 @@ Eigen::MatrixXd ScalarMatrixProduct::SlowEvaluation(const VariableTable& table) 
 	return _lhs->SlowEvaluation(table)(0, 0) * _rhs->SlowEvaluation(table);
 }
 
+Eigen::MatrixXd MatrixScalarPower::SlowEvaluation(const VariableTable &table) const {
+	return _lhs->SlowEvaluation(table).array().pow(_rhs->SlowEvaluation(table)(0, 0));
+}
+
 Eigen::MatrixXd HadamardProduct::SlowEvaluation(const VariableTable &table) const {
 	return _lhs->SlowEvaluation(table).cwiseProduct(_rhs->SlowEvaluation(table));
 }
@@ -905,8 +1015,8 @@ Eigen::MatrixXd DiagonalizationMatrix::SlowEvaluation(const VariableTable &table
 	return D;
 }
 
-Eigen::MatrixXd Constant::SlowEvaluation(const VariableTable& table) const {
-	return (Eigen::MatrixXd(1, 1) << _value).finished();
+Eigen::MatrixXd RationalScalarConstant::SlowEvaluation(const VariableTable& table) const {
+	return (Eigen::MatrixXd(1, 1) << static_cast<double>(_value)).finished();
 }
 
 Eigen::MatrixXd Variable::SlowEvaluation(const VariableTable& table) const {

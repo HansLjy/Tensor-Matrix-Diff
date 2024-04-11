@@ -153,6 +153,31 @@ void GetSingleOpDerivative(
 	analytic_gradient_A = gradient_A->SlowEvaluation(table);
 }
 
+TEST(DerivativeTest, PowerTest) {
+	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), 4, 5);
+	auto B = TMD::RationalScalarConstant::GetSelfType(TMD::RationalScalarConstant::RationalNumber(1, 2));
+	auto AxB = TMD::MatrixScalarPower::GetSelfType(A, B);
+	
+	auto gradient = TMD::GetDerivative(AxB, A->_uuid);
+	
+	TMD::VariableTable table;
+	
+	Eigen::MatrixXd A_mat = Eigen::MatrixXd::Random(4, 5).cwiseAbs();
+	
+	table[A->_uuid] = A_mat;
+	
+	auto tmp_table = table;
+	auto func = [&tmp_table, &A, &AxB] (const Eigen::MatrixXd& A_mat) -> Eigen::MatrixXd {
+		tmp_table[A->_uuid] = A_mat;
+		return AxB->SlowEvaluation(tmp_table);
+	};
+	
+	auto numeric_gradient = Numerics::MatrixGradient<Eigen::MatrixXd, Eigen::MatrixXd>(func, A_mat, 1e-8);
+	auto analytic_gradient = gradient->SlowEvaluation(table);
+
+	EXPECT_LT((numeric_gradient - analytic_gradient).norm(), 1e-4);
+}
+
 TEST(DerivativeTest, NegateTest) {
 	TMD::ExpressionPtr op_A, gradient_A;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
@@ -210,30 +235,6 @@ TEST(DerivativeTest, TransposeTest) {
 		op_A, gradient_A,
 		numeric_gradient_A, analytic_gradient_A
 	);
-	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
-}
-
-TEST(DerivativeTest, ScalarPowerTest) {
-	TMD::ExpressionPtr op_A, gradient_A;
-	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
-
-	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), 1, 1);
-	op_A = TMD::ScalarPower::GetSelfType(A, 1.5);
-	gradient_A = TMD::GetDerivative(op_A, A->_uuid);
-	
-	Eigen::MatrixXd A_mat = Eigen::MatrixXd::Random(1, 1).cwiseAbs();
-	
-	TMD::VariableTable table;
-	table[A->_uuid] = A_mat;
-	
-	auto func = [&table, &A, &op_A] (const Eigen::MatrixXd& A_mat) -> Eigen::MatrixXd {
-		table[A->_uuid] = A_mat;
-		return op_A->SlowEvaluation(table);
-	};
-	
-	numeric_gradient_A = Numerics::MatrixGradient<Eigen::MatrixXd, Eigen::MatrixXd>(func, A_mat, 1e-7);
-	analytic_gradient_A = gradient_A->SlowEvaluation(table);
-
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
 }
 

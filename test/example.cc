@@ -1,7 +1,12 @@
 #define IMPLEMENT_SLOW_EVALUATION
 #include "Expressions.hpp"
 #include "FiniteDifference.hpp"
+#include "TestConfig.hpp"
 #include <iostream>
+#include <filesystem>
+#include <fstream>
+
+namespace fs = std::filesystem;
 
 int main() {
 	auto V = TMD::Variable::GetSelfType("V", TMD::UUIDGenerator::GenUUID(), 3, 3);
@@ -12,7 +17,7 @@ int main() {
 
 	auto exp_part = TMD::Exp::GetSelfType(
 		TMD::ScalarMatrixProduct::GetSelfType(
-			TMD::Constant::GetSelfType(-0.5),
+			TMD::RationalScalarConstant::GetSelfType(TMD::RationalScalarConstant::RationalNumber(-1, 2)),
 			TMD::MatrixProduct::GetSelfType(
 				TMD::Transpose::GetSelfType(x_minus_p),
 				TMD::MatrixProduct::GetSelfType(
@@ -23,7 +28,12 @@ int main() {
 		)
 	);
 
-	auto mult_part = TMD::ScalarPower::GetSelfType(TMD::Determinant::GetSelfType(V), -0.5);
+	auto mult_part = TMD::MatrixScalarPower::GetSelfType(
+		TMD::Determinant::GetSelfType(V),
+		TMD::RationalScalarConstant::GetSelfType(
+			TMD::RationalScalarConstant::RationalNumber(-1, 2)
+		)
+	);
 
 	auto gaussian = TMD::MatrixProduct::GetSelfType(mult_part, exp_part);
 
@@ -44,5 +54,16 @@ int main() {
 	std::cerr << (numeric_gradient - analytic_gradient).norm() << std::endl;
 
 	std::cerr << *gaussian << std::endl;
+	auto gaussian_graph = gaussian->ExportGraph();
+
 	std::cerr << *derivative_gaussian << std::endl;
+	auto derivative_graph = derivative_gaussian->ExportGraph();
+
+	std::ofstream gaussian_graph_file(fs::path(TEST_OUTPUT_DIR) / "gaussian.tex");
+	gaussian_graph_file << gaussian_graph;
+	gaussian_graph_file.close();
+
+	std::ofstream gaussian_derivative_graph_file(fs::path(TEST_OUTPUT_DIR) / "gaussian-derivative.tex");
+	gaussian_derivative_graph_file << derivative_graph;
+	gaussian_derivative_graph_file.close();
 }

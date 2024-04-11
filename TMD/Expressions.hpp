@@ -2,9 +2,9 @@
 
 #include <memory>
 #include <string>
+#include <map>
 #include "TMDConfig.hpp"
 #ifdef IMPLEMENT_SLOW_EVALUATION
-	#include <map>
 	#include "Eigen/Eigen"
 #endif
 
@@ -27,18 +27,18 @@ enum class ExpressionType {
 	kDeterminantOp,
 	kVectorizationOp,
 	kTransposeOp,
-	kScalarPowerOp,
 	kDiagonalizeOp,
 	kExpOp,
 	kMatrixAdditionOp,
 	kMatrixProductOp,
 	kKroneckerProductOp,
+	kMatrixScalarPower,
 	kScalarMatrixProductOp,
 	kHadamardProductOp,
 	kIdentityMatrix,
 	kCommutationMatrix,
 	kDiagonalizationMatrix,
-	kScalarConstant,
+	kRationalScalarConstant,
 	kVariable
 };
 
@@ -52,12 +52,12 @@ const int kInversePriority              = 3;
 const int kDeterminantPriority          = 3;
 const int kVectorizationPriority        = 3;
 const int kTransposePriority            = 3;
-const int kScalarPowerPriority          = 3;
 const int kDiagonalizePriority          = 3;
 const int kExpPriority                  = 3;
 const int kMatrixAdditionPriority       = 0;
 const int kMatrixProductPriority        = 1;
 const int kKroneckerProductPriority     = 2;
+const int kMatrixScalarPowerPriority    = 3; // TODO:
 const int kScalarMatrixProductPriority  = 1;
 const int kHadamardProductPriority      = 2;
 const int kLeafPriority                 = 4;
@@ -70,6 +70,7 @@ public:
 	virtual ExpressionPtr GetTransposedDerivative() const;
 
 	virtual void Print(std::ostream& out) const = 0;
+	std::string ExportGraph() const;
 	virtual ExpressionPtr Clone() const = 0;
 
 	// return a **new** expression that equals
@@ -101,11 +102,12 @@ public:
 		_rows(rows), _cols(cols),
 		_has_variable(has_variable),
 		_has_differential(has_differential) {}
+	
+	virtual void RealExportGraph(std::vector<std::string>& labels, std::stringstream& out) const = 0;
 };
 
 class SingleOpExpression : public Expression {
 public:
-	
 	void MarkVariable(unsigned int uuid) override;
 	void MarkDifferential() override;
 
@@ -118,22 +120,32 @@ public:
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
 #endif
 
+	std::string _operator_sym;
 	ExpressionPtr _child;
 
 	SingleOpExpression(
 		int priority,
 		const ExpressionType& type,
+		const std::string& operator_sym,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
 		Expression(priority, type, rows, cols, has_variable, has_differential),
+		_operator_sym(operator_sym),
 		_child(child) {}
+	
+	void RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const override;
 };
 
 class Negate : public SingleOpExpression {
 public:
-	using SingleOpExpression::SingleOpExpression;
+	Negate(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		ExpressionPtr child):
+		SingleOpExpression(kNegatePriority, ExpressionType::kNegateOp, "-", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -149,7 +161,12 @@ public:
 
 class Inverse : public SingleOpExpression {
 public:
-	using SingleOpExpression::SingleOpExpression;
+	Inverse(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		ExpressionPtr child):
+		SingleOpExpression(kInversePriority, ExpressionType::kInverseOp, "\\text{inv}", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -165,7 +182,12 @@ public:
 
 class Determinant : public SingleOpExpression {
 public:
-	using SingleOpExpression::SingleOpExpression;
+	Determinant(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		ExpressionPtr child):
+		SingleOpExpression(kDeterminantPriority, ExpressionType::kDeterminantOp, "\\det", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -181,7 +203,12 @@ public:
 
 class Vectorization : public SingleOpExpression {
 public:
-	using SingleOpExpression::SingleOpExpression;
+	Vectorization(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		ExpressionPtr child):
+		SingleOpExpression(kVectorizationPriority, ExpressionType::kDeterminantOp, "\\text{vec}", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -197,7 +224,12 @@ public:
 
 class Transpose : public SingleOpExpression {
 public:
-	using SingleOpExpression::SingleOpExpression;
+	Transpose(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		ExpressionPtr child):
+		SingleOpExpression(kTransposePriority, ExpressionType::kTransposeOp, "\\top", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -211,36 +243,14 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
-class ScalarPower : public SingleOpExpression {
+class Diagonalization : public SingleOpExpression {
 public:
-	ScalarPower(
-		int priority,
-		const ExpressionType& type,
+	Diagonalization(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
-		ExpressionPtr child,
-		double power):
-		SingleOpExpression(priority, type, rows, cols, has_variable, has_differential, child),
-		_power(power) {}
-
-	double _power;
-
-	void Print(std::ostream &out) const override;
-	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
-
-#ifdef IMPLEMENT_SLOW_EVALUATION
-	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
-#endif
-
-	static ExpressionPtr GetSelfType(ExpressionPtr child, double power);
-};
-
-class Diagonalization : public SingleOpExpression {
-public:
-	using SingleOpExpression::SingleOpExpression;
+		ExpressionPtr child):
+		SingleOpExpression(kDiagonalizePriority, ExpressionType::kDiagonalizeOp, "\\text{diag}", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -257,13 +267,11 @@ public:
 class Exp : public SingleOpExpression {
 public:
 	Exp(
-		int priority,
-		const ExpressionType& type,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
-		SingleOpExpression(priority, type, rows, cols, has_variable, has_differential, child) {}
+		SingleOpExpression(kExpPriority, ExpressionType::kExpOp, "\\exp", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream& out) const override;
 	ExpressionPtr Clone() const override;
@@ -282,14 +290,14 @@ public:
 	DoubleOpExpression(
 		int priority,
 		const ExpressionType& type,
-		const std::string& operator_sign,
+		const std::string& operator_sym,
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr lhs,
 		ExpressionPtr rhs):
 		Expression(priority, type, rows, cols, has_variable, has_differential),
-		_lhs(lhs), _rhs(rhs), _operator_sign(operator_sign) {}
+		_lhs(lhs), _rhs(rhs), _operator_sym(operator_sym) {}
 
 	void MarkVariable(unsigned int uuid) override;
 	void MarkDifferential() override;
@@ -299,13 +307,14 @@ public:
 	ExpressionPtr Differentiate() const override = 0;
 	ExpressionPtr Vectorize() const override = 0;
 
+	void RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
 #endif
 
 	ExpressionPtr _lhs, _rhs;
-	const std::string _operator_sign;
+	const std::string _operator_sym;
 };
 
 class MatrixAddition : public DoubleOpExpression {
@@ -373,6 +382,23 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr scalar, ExpressionPtr matrix);
 };
 
+// WARNING: for now, the power has to be constant
+class MatrixScalarPower : public DoubleOpExpression {
+public:
+	using DoubleOpExpression::DoubleOpExpression;
+
+	void Print(std::ostream &out) const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
+#endif
+
+	static ExpressionPtr GetSelfType(ExpressionPtr matrix, ExpressionPtr power);
+};
+
 class HadamardProduct : public DoubleOpExpression {
 public:
 	using DoubleOpExpression::DoubleOpExpression;
@@ -411,6 +437,8 @@ public:
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
 #endif
+
+	void RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const override;
 };
 
 class IdentityMatrix : public LeafExpression {
@@ -485,15 +513,26 @@ public:
 	int _order;
 };
 
-class Constant : public LeafExpression {
+class RationalScalarConstant : public LeafExpression {
 public:
-	Constant(
+	struct RationalNumber {
+		int _p, _q;
+
+		RationalNumber(int val);
+		RationalNumber(int p, int q);
+		
+		RationalNumber& operator+=(const RationalNumber& rhs);
+
+		explicit operator double() const;
+	};
+
+	RationalScalarConstant(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
-		double value):
-		LeafExpression(ExpressionType::kScalarConstant, rows, cols, has_variable, has_differential),
-		_value(value) {}
+		const RationalNumber& val):
+		LeafExpression(ExpressionType::kRationalScalarConstant, rows, cols, has_variable, has_differential),
+		_value(val) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -504,8 +543,9 @@ public:
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static ExpressionPtr GetSelfType(double value);
-	double _value;
+	static ExpressionPtr GetSelfType(const RationalNumber& number);
+
+	RationalNumber _value;
 };
 
 class Variable : public LeafExpression {
