@@ -40,6 +40,7 @@ enum class ExpressionType {
 	kCommutationMatrix,
 	kDiagonalizationMatrix,
 	kSkewMatrix,
+	kElementMatrix,
 	kRationalScalarConstant,
 	kVariable
 };
@@ -65,12 +66,17 @@ const int kScalarMatrixProductPriority  = 1;
 const int kHadamardProductPriority      = 2;
 const int kLeafPriority                 = 4;
 
+ExpressionPtr GetDotProduct(const ExpressionPtr lhs, const ExpressionPtr rhs);
+ExpressionPtr GetVector2Norm(const ExpressionPtr x);
+ExpressionPtr GetMultipleProduct(const std::vector<ExpressionPtr>& prods);
+ExpressionPtr GetMultipleAddition(const std::vector<ExpressionPtr>& adds);
+
 class Expression : public std::enable_shared_from_this<Expression> {
 public:
 	virtual void MarkVariable(unsigned int uuid) = 0;
 	virtual void MarkDifferential() = 0;
 
-	ExpressionPtr Substitute(unsigned int uuid, const ExpressionPtr expr) const;
+	ExpressionPtr Substitute(const std::map<unsigned int, const ExpressionPtr>& subs) const;
 	virtual ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) = 0;
 
 	virtual ExpressionPtr GetTransposedDerivative() const;
@@ -466,8 +472,8 @@ public:
 
 	void Print(std::ostream &out) const override = 0;
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr Differentiate() const override = 0;
-	ExpressionPtr Vectorize() const override = 0;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
@@ -488,8 +494,6 @@ public:
 	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -512,8 +516,6 @@ public:
 	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -536,8 +538,6 @@ public:
 	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
@@ -555,14 +555,31 @@ public:
 	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
 #endif
 
 	static ExpressionPtr GetSelfType();
+};
+
+class ElementMatrix : public LeafExpression {
+public:
+	ElementMatrix(
+		int element_row, int element_col,
+		int rows, int cols):
+		LeafExpression(ExpressionType::kElementMatrix, rows, cols, false, false) {}
+	
+	void Print(std::ostream &out) const override;
+	ExpressionPtr Clone() const override;
+
+	int _element_row, _element_col;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
+#endif
+
+	static ExpressionPtr GetSelfType(int element_row, int element_col, int rows, int cols);
 };
 
 class RationalScalarConstant : public LeafExpression {
@@ -588,8 +605,6 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;

@@ -30,6 +30,48 @@ ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variabl
 	return result;
 }
 
+ExpressionPtr GetDotProduct(const ExpressionPtr lhs, const ExpressionPtr rhs) {
+	if (lhs->_rows != rhs->_rows || lhs->_cols != 1 || rhs->_cols != 1) {
+		throw std::logic_error("dot producting two matrices with invalid shape");
+	}
+	return MatrixProduct::GetSelfType(
+		Transpose::GetSelfType(lhs),
+		rhs
+	);
+}
+
+ExpressionPtr GetVector2Norm(const ExpressionPtr x) {
+	if (x->_cols != 1) {
+		throw std::logic_error("getting vector norm of a non-vector");
+	}
+	return MatrixScalarPower::GetSelfType(
+		GetDotProduct(x, x),
+		RationalScalarConstant::GetSelfType({1, 2})
+	);
+}
+
+ExpressionPtr GetMultipleProduct(const std::vector<ExpressionPtr> &prods) {
+	if (prods.size() < 2) {
+		throw std::logic_error("not enough operands");
+	}
+	auto result = MatrixProduct::GetSelfType(prods[0], prods[1]);
+	for (unsigned int i = 2; i < prods.size(); i++) {
+		result = MatrixProduct::GetSelfType(result, prods[i]);
+	}
+	return result;
+}
+
+ExpressionPtr GetMultipleAddition(const std::vector<ExpressionPtr> &adds) {
+	if (adds.size() < 2) {
+		throw std::logic_error("not enough operands");
+	}
+	auto result = MatrixAddition::GetSelfType(adds[0], adds[1]);
+	for (unsigned int i = 2; i < adds.size(); i++) {
+		result = MatrixAddition::GetSelfType(result, adds[i]);
+	}
+	return result;
+}
+
 std::string Expression::ExportGraph() const {
 	std::stringstream out;
 
@@ -59,9 +101,15 @@ std::string Expression::ExportGraph() const {
 	return out.str();
 }
 
-ExpressionPtr Expression::Substitute(unsigned int uuid, const ExpressionPtr expr) const {
+ExpressionPtr Expression::Substitute(
+	const std::map<unsigned int, const ExpressionPtr> &subs
+) const {
 	auto copy = Clone();
-	return copy->RealSubstitute(uuid, expr);
+	// TODO: make this more efficient
+	for (const auto& [uuid, expr] : subs){
+		copy = copy->RealSubstitute(uuid, expr);
+	}
+	return copy;
 }
 
 ExpressionPtr Expression::GetTransposedDerivative() const {
@@ -376,8 +424,8 @@ void DoubleOpExpression::MarkDifferential() {
 }
 
 ExpressionPtr DoubleOpExpression::RealSubstitute(unsigned int uuid, const ExpressionPtr expr) {
-	_lhs = _lhs->Substitute(uuid, expr);
-	_rhs = _rhs->Substitute(uuid, expr);
+	_lhs = _lhs->RealSubstitute(uuid, expr);
+	_rhs = _rhs->RealSubstitute(uuid, expr);
 	return shared_from_this();
 }
 
@@ -815,6 +863,14 @@ void LeafExpression::RealExportGraph(std::vector<std::string> &labels, std::stri
 	out << "nd" << cur_node_id << "[label = label" << cur_node_id << "]" << std::endl;
 }
 
+ExpressionPtr LeafExpression::Differentiate() const {
+	throw std::logic_error("differentiating a leaf expression without variable");
+}
+
+ExpressionPtr LeafExpression::Vectorize() const {
+	throw std::logic_error("vectorizing a leaf expression without differential");
+}
+
 ExpressionPtr IdentityMatrix::GetSelfType(int order) {
 	return std::make_shared<IdentityMatrix>(order, order, false, false, order);
 }
@@ -825,14 +881,6 @@ void IdentityMatrix::Print(std::ostream &out) const {
 
 ExpressionPtr IdentityMatrix::Clone() const {
 	return GetSelfType(_order);
-}
-
-ExpressionPtr IdentityMatrix::Differentiate() const {
-	throw std::logic_error("differentiating an identity matrix");
-}
-
-ExpressionPtr IdentityMatrix::Vectorize() const {
-	throw std::logic_error("vectorizing an identity matrix");
 }
 
 ExpressionPtr CommutationMatrix::GetSelfType(int m, int n) {
@@ -854,14 +902,6 @@ ExpressionPtr CommutationMatrix::Clone() const {
 	return GetSelfType(_m, _n);
 }
 
-ExpressionPtr CommutationMatrix::Differentiate() const {
-	throw std::logic_error("differentiating a commutation matrix");
-}
-
-ExpressionPtr CommutationMatrix::Vectorize() const {
-	throw std::logic_error("vectorizing a commutation matrix");
-}
-
 ExpressionPtr DiagonalizationMatrix::GetSelfType(int order) {
 	return std::make_shared<DiagonalizationMatrix>(order * order, order, false, false, order);
 }
@@ -872,14 +912,6 @@ void DiagonalizationMatrix::Print(std::ostream &out) const {
 
 ExpressionPtr DiagonalizationMatrix::Clone() const {
 	return GetSelfType(_order);
-}
-
-ExpressionPtr DiagonalizationMatrix::Differentiate() const {
-	throw std::logic_error("differenticating diagonalization matrix");
-}
-
-ExpressionPtr DiagonalizationMatrix::Vectorize() const {
-	throw std::logic_error("vectorizing diagonalization matrix");
 }
 
 ExpressionPtr SkewMatrix::GetSelfType() {
@@ -894,12 +926,16 @@ ExpressionPtr SkewMatrix::Clone() const {
 	return SkewMatrix::GetSelfType();
 }
 
-ExpressionPtr SkewMatrix::Differentiate() const {
-	throw std::logic_error("differenticating skewmatrix");
+ExpressionPtr ElementMatrix::GetSelfType(int element_row, int element_col, int rows, int cols) {
+	return std::make_shared<ElementMatrix>(element_row, element_col, rows, cols);
 }
 
-ExpressionPtr SkewMatrix::Vectorize() const {
-	throw std::logic_error("vectorizing skewmatrix");
+void ElementMatrix::Print(std::ostream &out) const {
+	out << "E_{" << _element_row << ", " << _element_col << "}^{" << _rows << ", " << _cols << "}";
+}
+
+ExpressionPtr ElementMatrix::Clone() const {
+	return GetSelfType(_element_row, _element_col, _rows, _cols);
 }
 
 int gcd(int a, int b) {
@@ -949,14 +985,6 @@ void RationalScalarConstant::Print(std::ostream &out) const {
 
 ExpressionPtr RationalScalarConstant::Clone() const {
 	return RationalScalarConstant::GetSelfType(_value);
-}
-
-ExpressionPtr RationalScalarConstant::Differentiate() const {
-	throw std::logic_error("differentiating a scalar constant");
-}
-
-ExpressionPtr RationalScalarConstant::Vectorize() const {
-	throw std::logic_error("vectorizing a scalar constant");
 }
 
 void Variable::MarkVariable(unsigned int uuid) {
@@ -1106,6 +1134,12 @@ Eigen::MatrixXd DiagonalizationMatrix::SlowEvaluation(const VariableTable &table
 
 Eigen::MatrixXd SkewMatrix::SlowEvaluation(const VariableTable &table) const {
 	return Numerics::GetVecHatMatrix();
+}
+
+Eigen::MatrixXd ElementMatrix::SlowEvaluation(const VariableTable &table) const {
+	Eigen::MatrixXd result = Eigen::MatrixXd::Zero(_rows, _cols);
+	result(_rows, _cols) = 1;
+	return result;
 }
 
 Eigen::MatrixXd RationalScalarConstant::SlowEvaluation(const VariableTable& table) const {

@@ -291,7 +291,7 @@ TEST(FunctionalityTest, SubstitutionTest) {
 		TMD::MatrixProduct::GetSelfType(B, Y), b
 	);
 
-	auto subed = AXpa->Substitute(X->_uuid, BYpb);
+	auto subed = AXpa->Substitute({{X->_uuid, BYpb}});
 	std::cerr << *subed << std::endl;
 
 	Eigen::MatrixXd A_mat = Eigen::MatrixXd::Random(4, 3);
