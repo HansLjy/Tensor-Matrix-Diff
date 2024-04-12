@@ -238,6 +238,18 @@ TEST(DerivativeTest, TransposeTest) {
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
 }
 
+TEST(DerivativeTest, SkewTest) {
+	TMD::ExpressionPtr op_A, gradient_A;
+	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;
+	GetSingleOpDerivative<TMD::Skew>(
+		3, 1,
+		1e-4,
+		op_A, gradient_A,
+		numeric_gradient_A, analytic_gradient_A
+	);
+	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
+}
+
 TEST(DerivativeTest, ExpTest) {
 	TMD::ExpressionPtr op_A, gradient_A;
 	Eigen::MatrixXd numeric_gradient_A, analytic_gradient_A;

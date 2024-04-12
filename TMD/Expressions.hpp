@@ -28,6 +28,7 @@ enum class ExpressionType {
 	kVectorizationOp,
 	kTransposeOp,
 	kDiagonalizeOp,
+	kSkewOp,
 	kExpOp,
 	kMatrixAdditionOp,
 	kMatrixProductOp,
@@ -38,6 +39,7 @@ enum class ExpressionType {
 	kIdentityMatrix,
 	kCommutationMatrix,
 	kDiagonalizationMatrix,
+	kSkewMatrix,
 	kRationalScalarConstant,
 	kVariable
 };
@@ -53,6 +55,7 @@ const int kDeterminantPriority          = 3;
 const int kVectorizationPriority        = 3;
 const int kTransposePriority            = 3;
 const int kDiagonalizePriority          = 3;
+const int kSkewPriority                 = 3;
 const int kExpPriority                  = 3;
 const int kMatrixAdditionPriority       = 0;
 const int kMatrixProductPriority        = 1;
@@ -256,6 +259,32 @@ public:
 		ExpressionPtr child):
 		SingleOpExpression(kDiagonalizePriority, ExpressionType::kDiagonalizeOp, "\\text{diag}", rows, cols, has_variable, has_differential, child) {}
 
+	void Print(std::ostream &out) const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
+#endif
+
+	static ExpressionPtr GetSelfType(ExpressionPtr child);
+};
+
+class Skew : public SingleOpExpression {
+public:
+	Skew(
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential,
+		ExpressionPtr child):
+		SingleOpExpression(
+			kSkewPriority, ExpressionType::kSkewOp,
+			"\\left[\\right]",
+			rows, cols,
+			has_variable, has_differential,
+			child) {}
+	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
 	ExpressionPtr Differentiate() const override;
@@ -517,6 +546,23 @@ public:
 	static ExpressionPtr GetSelfType(int order);
 
 	int _order;
+};
+
+class SkewMatrix : public LeafExpression {
+public:
+	SkewMatrix():
+		LeafExpression(ExpressionType::kSkewMatrix, 9, 3, false, false) {}
+	
+	void Print(std::ostream &out) const override;
+	ExpressionPtr Clone() const override;
+	ExpressionPtr Differentiate() const override;
+	ExpressionPtr Vectorize() const override;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
+#endif
+
+	static ExpressionPtr GetSelfType();
 };
 
 class RationalScalarConstant : public LeafExpression {

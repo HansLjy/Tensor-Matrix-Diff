@@ -292,11 +292,45 @@ ExpressionPtr Diagonalization::Vectorize() const {
 }
 
 ExpressionPtr Diagonalization::GetSelfType(ExpressionPtr child) {
-	assert(child->_cols == 1);
+	if (child->_cols != 1) {
+		throw std::logic_error("diagonalizing an non-vector expression");
+	}
 	return std::make_shared<Diagonalization>(
 		child->_rows, child->_rows,
 		child->_has_variable, child->_has_differential,
 		child
+	);
+}
+
+ExpressionPtr Skew::GetSelfType(ExpressionPtr child) {
+	if (child->_cols != 1 || child->_rows != 3) {
+		throw std::logic_error("matrix / vector not skew-able");
+	}
+	return std::make_shared<Skew>(
+		3, 3,
+		child->_has_variable, child->_has_differential,
+		child
+	);
+}
+
+void Skew::Print(std::ostream &out) const {
+	out << "\\left[";
+	_child->Print(out);
+	out << "\\right]";
+}
+
+ExpressionPtr Skew::Clone() const {
+	return GetSelfType(_child->Clone());
+}
+
+ExpressionPtr Skew::Differentiate() const {
+	return GetSelfType(_child->Differentiate());
+}
+
+ExpressionPtr Skew::Vectorize() const {
+	return MatrixProduct::GetSelfType(
+		SkewMatrix::GetSelfType(), // TODO:
+		_child->Vectorize()
 	);
 }
 
@@ -848,6 +882,26 @@ ExpressionPtr DiagonalizationMatrix::Vectorize() const {
 	throw std::logic_error("vectorizing diagonalization matrix");
 }
 
+ExpressionPtr SkewMatrix::GetSelfType() {
+	return std::make_shared<SkewMatrix>();
+}
+
+void SkewMatrix::Print(std::ostream &out) const {
+	out << "H";
+}
+
+ExpressionPtr SkewMatrix::Clone() const {
+	return SkewMatrix::GetSelfType();
+}
+
+ExpressionPtr SkewMatrix::Differentiate() const {
+	throw std::logic_error("differenticating skewmatrix");
+}
+
+ExpressionPtr SkewMatrix::Vectorize() const {
+	throw std::logic_error("vectorizing skewmatrix");
+}
+
 int gcd(int a, int b) {
 	return b > 0 ? gcd(b, a % b) : a;
 }
@@ -999,6 +1053,10 @@ Eigen::MatrixXd Diagonalization::SlowEvaluation(const VariableTable &table) cons
 	return _child->SlowEvaluation(table).asDiagonal();
 }
 
+Eigen::MatrixXd Skew::SlowEvaluation(const VariableTable &table) const {
+	return Numerics::GetHatMatrix(_child->SlowEvaluation(table));
+}
+
 Eigen::MatrixXd Exp::SlowEvaluation(const VariableTable &table) const {
 	return _child->SlowEvaluation(table).array().exp();
 }
@@ -1044,6 +1102,10 @@ Eigen::MatrixXd DiagonalizationMatrix::SlowEvaluation(const VariableTable &table
 		D(i * _order + i, i) = 1;
 	}
 	return D;
+}
+
+Eigen::MatrixXd SkewMatrix::SlowEvaluation(const VariableTable &table) const {
+	return Numerics::GetVecHatMatrix();
 }
 
 Eigen::MatrixXd RationalScalarConstant::SlowEvaluation(const VariableTable& table) const {
