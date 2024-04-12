@@ -62,10 +62,13 @@ const int kScalarMatrixProductPriority  = 1;
 const int kHadamardProductPriority      = 2;
 const int kLeafPriority                 = 4;
 
-class Expression {
+class Expression : public std::enable_shared_from_this<Expression> {
 public:
 	virtual void MarkVariable(unsigned int uuid) = 0;
 	virtual void MarkDifferential() = 0;
+
+	ExpressionPtr Substitute(unsigned int uuid, const ExpressionPtr expr) const;
+	virtual ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) = 0;
 
 	virtual ExpressionPtr GetTransposedDerivative() const;
 
@@ -110,6 +113,7 @@ class SingleOpExpression : public Expression {
 public:
 	void MarkVariable(unsigned int uuid) override;
 	void MarkDifferential() override;
+	ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) override;
 
 	void Print(std::ostream &out) const override = 0;
 	ExpressionPtr Clone() const override = 0;
@@ -301,6 +305,7 @@ public:
 
 	void MarkVariable(unsigned int uuid) override;
 	void MarkDifferential() override;
+	ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) override;
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override = 0;
@@ -424,10 +429,11 @@ public:
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential) :
-		Expression(kLeafPriority, type, rows, cols, has_variable, has_differential) {} 
+		Expression(kLeafPriority, type, rows, cols, has_variable, has_differential) {}
 
 	void MarkVariable(unsigned int uuid) override;
 	void MarkDifferential() override;
+	ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) override;
 
 	void Print(std::ostream &out) const override = 0;
 	ExpressionPtr Clone() const override = 0;
@@ -560,6 +566,7 @@ public:
 		_name(name), _uuid(uuid) {}
 
 	void MarkVariable(unsigned int uuid) override;
+	ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) override;
 
 	ExpressionPtr GetTransposedDerivative() const override;
 	

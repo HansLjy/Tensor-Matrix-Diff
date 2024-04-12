@@ -59,6 +59,11 @@ std::string Expression::ExportGraph() const {
 	return out.str();
 }
 
+ExpressionPtr Expression::Substitute(unsigned int uuid, const ExpressionPtr expr) const {
+	auto copy = Clone();
+	return copy->RealSubstitute(uuid, expr);
+}
+
 ExpressionPtr Expression::GetTransposedDerivative() const {
 	throw std::logic_error("should be copying instead of getting derivative");
 }
@@ -71,6 +76,11 @@ void SingleOpExpression::MarkVariable(unsigned int uuid) {
 void SingleOpExpression::MarkDifferential() {
 	_child->MarkDifferential();
 	_has_differential = _child->_has_differential;
+}
+
+ExpressionPtr SingleOpExpression::RealSubstitute(unsigned int uuid, const ExpressionPtr expr) {
+	_child = _child->RealSubstitute(uuid, expr);
+	return shared_from_this();
 }
 
 void SingleOpExpression::RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const {
@@ -329,6 +339,12 @@ void DoubleOpExpression::MarkDifferential() {
 	_lhs->MarkDifferential();
 	_rhs->MarkDifferential();
 	_has_differential = (_lhs->_has_differential || _rhs->_has_differential);
+}
+
+ExpressionPtr DoubleOpExpression::RealSubstitute(unsigned int uuid, const ExpressionPtr expr) {
+	_lhs = _lhs->Substitute(uuid, expr);
+	_rhs = _rhs->Substitute(uuid, expr);
+	return shared_from_this();
 }
 
 void DoubleOpExpression::RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const {
@@ -753,6 +769,10 @@ void LeafExpression::MarkVariable(unsigned int uuid) {
 
 void LeafExpression::MarkDifferential() {}
 
+ExpressionPtr LeafExpression::RealSubstitute(unsigned int uuid, const ExpressionPtr expr) {
+	return shared_from_this();
+}
+
 void LeafExpression::RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const {
 	unsigned int cur_node_id = labels.size();
 	std::stringstream cur_out;
@@ -887,6 +907,17 @@ ExpressionPtr RationalScalarConstant::Vectorize() const {
 
 void Variable::MarkVariable(unsigned int uuid) {
 	_has_variable = (uuid == _uuid);
+}
+
+ExpressionPtr Variable::RealSubstitute(unsigned int uuid, const ExpressionPtr expr) {
+	if (_uuid == uuid) {
+		if (_rows != expr->_rows || _cols != expr->_cols) {
+			throw std::logic_error("substitution does not match in size");
+		}
+		return expr->Clone();
+	} else {
+		return shared_from_this();
+	}
 }
 
 ExpressionPtr Variable::GetTransposedDerivative() const {

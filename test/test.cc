@@ -261,3 +261,45 @@ TEST(DerivativeTest, DiagonalizeTest) {
 	);
 	EXPECT_LT((numeric_gradient_A - analytic_gradient_A).norm(), 1e-4);
 }
+
+TEST(FunctionalityTest, SubstitutionTest) {
+	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), 4, 3);
+	auto B = TMD::Variable::GetSelfType("B", TMD::UUIDGenerator::GenUUID(), 3, 3);
+	auto a = TMD::Variable::GetSelfType("a", TMD::UUIDGenerator::GenUUID(), 4, 1);
+	auto b = TMD::Variable::GetSelfType("b", TMD::UUIDGenerator::GenUUID(), 3, 1);
+	
+	auto X = TMD::Variable::GetSelfType("X", TMD::UUIDGenerator::GenUUID(), 3, 1);
+	auto Y = TMD::Variable::GetSelfType("Y", TMD::UUIDGenerator::GenUUID(), 3, 1);
+	
+	auto AXpa = TMD::MatrixAddition::GetSelfType(
+		TMD::MatrixProduct::GetSelfType(A, X), a
+	);
+
+	auto BYpb = TMD::MatrixAddition::GetSelfType(
+		TMD::MatrixProduct::GetSelfType(B, Y), b
+	);
+
+	auto subed = AXpa->Substitute(X->_uuid, BYpb);
+	std::cerr << *subed << std::endl;
+
+	Eigen::MatrixXd A_mat = Eigen::MatrixXd::Random(4, 3);
+	Eigen::MatrixXd B_mat = Eigen::MatrixXd::Random(3, 3);
+	Eigen::MatrixXd a_mat = Eigen::MatrixXd::Random(4, 1);
+	Eigen::MatrixXd b_mat = Eigen::MatrixXd::Random(3, 1);
+
+	Eigen::MatrixXd X_mat = Eigen::MatrixXd::Random(3, 1);
+	Eigen::MatrixXd Y_mat = Eigen::MatrixXd::Random(3, 1);
+
+	TMD::VariableTable table;
+	table[A->_uuid] = A_mat;
+	table[B->_uuid] = B_mat;
+	table[a->_uuid] = a_mat;
+	table[b->_uuid] = b_mat;
+	table[X->_uuid] = X_mat;
+	table[Y->_uuid] = Y_mat;
+
+	auto result = subed->SlowEvaluation(table);
+	Eigen::MatrixXd expected = A_mat * (B_mat * Y_mat + b_mat) + a_mat;
+
+	EXPECT_LT((result - expected).norm(), 1e-5);
+}
