@@ -927,6 +927,9 @@ ExpressionPtr SkewMatrix::Clone() const {
 }
 
 ExpressionPtr ElementMatrix::GetSelfType(int element_row, int element_col, int rows, int cols) {
+	if (element_row >= rows || element_col >= cols) {
+		throw std::logic_error("invalid element matrix");
+	}
 	return std::make_shared<ElementMatrix>(element_row, element_col, rows, cols);
 }
 
@@ -1138,7 +1141,7 @@ Eigen::MatrixXd SkewMatrix::SlowEvaluation(const VariableTable &table) const {
 
 Eigen::MatrixXd ElementMatrix::SlowEvaluation(const VariableTable &table) const {
 	Eigen::MatrixXd result = Eigen::MatrixXd::Zero(_rows, _cols);
-	result(_rows, _cols) = 1;
+	result(_element_row, _element_col) = 1;
 	return result;
 }
 
@@ -1149,7 +1152,7 @@ Eigen::MatrixXd RationalScalarConstant::SlowEvaluation(const VariableTable& tabl
 Eigen::MatrixXd Variable::SlowEvaluation(const VariableTable& table) const {
 	auto itr = table.find(_uuid);
 	if (itr == table.end()) {
-		throw std::logic_error("cannot find variable");
+		throw std::logic_error("cannot find variable, uuid = " + std::to_string(_uuid));
 	} else {
 		if (itr->second.rows() != _rows || itr->second.cols() != _cols) {
 			throw std::logic_error("variable value does not match specified size");

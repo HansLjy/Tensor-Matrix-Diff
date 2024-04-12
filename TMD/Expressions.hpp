@@ -568,7 +568,8 @@ public:
 	ElementMatrix(
 		int element_row, int element_col,
 		int rows, int cols):
-		LeafExpression(ExpressionType::kElementMatrix, rows, cols, false, false) {}
+		LeafExpression(ExpressionType::kElementMatrix, rows, cols, false, false),
+		_element_row(element_row), _element_col(element_col) {}
 	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;

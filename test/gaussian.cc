@@ -144,4 +144,23 @@ int main() {
 	alpha_gradient_file << alpha_gradient_graph_str;
 	alpha_gradient_file.close();
 
+	TMD::VariableTable table;
+	table[A->_uuid] = Eigen::MatrixXd::Random(3, 3);
+	table[b->_uuid] = Eigen::MatrixXd::Random(3, 1);
+	table[q->_uuid] = Eigen::MatrixXd::Random(4, 1);
+	table[S->_uuid] = Eigen::MatrixXd::Random(3, 3);
+	table[p->_uuid] = Eigen::MatrixXd::Random(3, 1);
+	table[Sv->_uuid] = Eigen::MatrixXd::Random(3, 4);
+	table[Sq0->_uuid] = Eigen::MatrixXd::Random(1, 4);
+	table[Sx1->_uuid] = Eigen::MatrixXd::Random(1, 3);
+	table[Sx2->_uuid] = Eigen::MatrixXd::Random(1, 3);
+	table[Sx3->_uuid] = Eigen::MatrixXd::Random(1, 3);
+	table[S2d->_uuid] = Eigen::MatrixXd::Random(2, 3);
+	table[x->_uuid] = Eigen::MatrixXd::Random(2, 1);
+
+	auto numeric_gradient = TMD::GetExpressionNumericDerivative(alpha, table, q->_uuid);
+	auto analytic_gradient = alpha_gradient->SlowEvaluation(table);
+	std::cerr << numeric_gradient.transpose() << std::endl
+			  << analytic_gradient.transpose() << std::endl;
+
 }
