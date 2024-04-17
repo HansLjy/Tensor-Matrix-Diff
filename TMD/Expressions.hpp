@@ -17,6 +17,7 @@ namespace TMD {
 
 class Expression;
 typedef std::shared_ptr<Expression> ExpressionPtr;
+typedef std::shared_ptr<const Expression> ConstExpressionPtr;
 
 // return nullptr if the expression does not contain the variable
 ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variable);
@@ -73,22 +74,33 @@ ExpressionPtr GetMultipleAddition(const std::vector<ExpressionPtr>& adds);
 
 class Expression : public std::enable_shared_from_this<Expression> {
 public:
-	virtual void MarkVariable(unsigned int uuid) = 0;
-	virtual void MarkDifferential() = 0;
+	ExpressionPtr MarkVariable(unsigned int variable_id) const;
+	ExpressionPtr RealMarkVariable(unsigned int variable_id, std::map<unsigned int, ExpressionPtr>& marked_exprs) const;
+	virtual ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr>& marked_exprs) const = 0;
 
-	ExpressionPtr Substitute(const std::map<unsigned int, const ExpressionPtr>& subs) const;
-	virtual ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) = 0;
+	ExpressionPtr Differentiate() const;
+	ExpressionPtr RealDifferentiate(std::map<unsigned int, ExpressionPtr>& diffed_exprs) const;
+	virtual ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr>& diffed_exprs) const = 0;
+
+	ExpressionPtr MarkDifferential();
+	ExpressionPtr RealMarkDifferential(std::map<unsigned int, ExpressionPtr>& marked_exprs);
+	virtual ConstExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr>& marked_exprs) const = 0;
+
+	ExpressionPtr Vectorize() const;
+	ExpressionPtr RealVectorize(std::map<unsigned int, ExpressionPtr>& veced_exprs) const;
+	virtual ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr>& veced_exprs) const = 0;
+
+	ExpressionPtr Substitute(const std::map<unsigned int, ExpressionPtr>& subs) const;
+	ExpressionPtr RealSubstitute(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs) const;
+	virtual ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs) = 0;
 
 	virtual ExpressionPtr GetTransposedDerivative() const;
 
 	virtual void Print(std::ostream& out) const = 0;
 	std::string ExportGraph() const;
+	virtual void RealExportGraph(std::vector<std::string>& labels, std::stringstream& out) const = 0;
 	virtual ExpressionPtr Clone() const = 0;
 
-	// return a **new** expression that equals
-	// the differential of the current one
-	virtual ExpressionPtr Differentiate() const = 0;
-	virtual ExpressionPtr Vectorize() const = 0;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	virtual Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const = 0;
@@ -96,6 +108,7 @@ public:
 
 	virtual ~Expression() = default;
 
+	const unsigned int _uuid;
 	const int _priority;
 	const ExpressionType _type;
 
@@ -108,26 +121,23 @@ public:
 		const ExpressionType& type,
 		int rows, int cols,
 		bool has_variable,
-		bool has_differential):
-		_priority(priority),
-		_type(type),
-		_rows(rows), _cols(cols),
-		_has_variable(has_variable),
-		_has_differential(has_differential) {}
+		bool has_differential
+	);
 	
-	virtual void RealExportGraph(std::vector<std::string>& labels, std::stringstream& out) const = 0;
 };
 
 class SingleOpExpression : public Expression {
 public:
-	void MarkVariable(unsigned int uuid) override;
-	void MarkDifferential() override;
-	ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) override;
+	ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ConstExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr> &subs, std::map<unsigned int, ExpressionPtr> &subed_exprs) override;
 
 	void Print(std::ostream &out) const override = 0;
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr Differentiate() const override = 0;
-	ExpressionPtr Vectorize() const override = 0;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
+
+	virtual ExpressionPtr GetSingleOpExpression(ExpressionPtr child) const = 0;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
@@ -162,8 +172,8 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -183,8 +193,8 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -204,8 +214,8 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -225,8 +235,8 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -246,8 +256,8 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -267,8 +277,8 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -293,8 +303,8 @@ public:
 	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -314,8 +324,8 @@ public:
 
 	void Print(std::ostream& out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
@@ -338,16 +348,18 @@ public:
 		Expression(priority, type, rows, cols, has_variable, has_differential),
 		_lhs(lhs), _rhs(rhs), _operator_sym(operator_sym) {}
 
-	void MarkVariable(unsigned int uuid) override;
-	void MarkDifferential() override;
-	ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) override;
+	ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ConstExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr> &subs, std::map<unsigned int, ExpressionPtr> &subed_exprs) override;
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr Differentiate() const override = 0;
-	ExpressionPtr Vectorize() const override = 0;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 	void RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const override;
+	
+	virtual ExpressionPtr GetDoubleOpExpression(ExpressionPtr lhs, ExpressionPtr rhs) const = 0;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
@@ -364,8 +376,8 @@ public:
 	ExpressionPtr GetTransposedDerivative() const override;
 
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -381,8 +393,8 @@ public:
 	ExpressionPtr GetTransposedDerivative() const override;
 
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -396,8 +408,8 @@ public:
 	using DoubleOpExpression::DoubleOpExpression;
 
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -412,8 +424,8 @@ public:
 	using DoubleOpExpression::DoubleOpExpression;
 
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -429,8 +441,8 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
@@ -444,8 +456,8 @@ public:
 	using DoubleOpExpression::DoubleOpExpression;
 	
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -466,14 +478,14 @@ public:
 		bool has_differential) :
 		Expression(kLeafPriority, type, rows, cols, has_variable, has_differential) {}
 
-	void MarkVariable(unsigned int uuid) override;
-	void MarkDifferential() override;
-	ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) override;
+	ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ConstExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr> &subs, std::map<unsigned int, ExpressionPtr> &subed_exprs) override;
 
 	void Print(std::ostream &out) const override = 0;
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
@@ -623,31 +635,33 @@ public:
 		bool has_variable,
 		bool has_differential,
 		const std::string& name,
-		unsigned int uuid):
+		unsigned int variable_id):
 		LeafExpression(ExpressionType::kVariable, rows, cols, has_variable, has_differential),
-		_name(name), _uuid(uuid) {}
+		_name(name), _variable_id(variable_id) {}
 
-	void MarkVariable(unsigned int uuid) override;
-	ExpressionPtr RealSubstitute(unsigned int uuid, const ExpressionPtr expr) override;
+	ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr> &subs, std::map<unsigned int, ExpressionPtr> &subed_exprs) override;
 
 	ExpressionPtr GetTransposedDerivative() const override;
 	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr Differentiate() const override;
-	ExpressionPtr Vectorize() const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
 
-	static std::shared_ptr<Variable> GetSelfType(const std::string& name, unsigned int uuid, int rows, int cols);
+	static std::shared_ptr<Variable> GetSelfType(const std::string& name, unsigned int variable_id, int rows, int cols);
 
 	std::string _name;
-	unsigned int _uuid;
+	unsigned int _variable_id;
 };
 
 std::ostream& operator<<(std::ostream& out, const Expression& expr);
+
+namespace internal {
 
 class UUIDGenerator {
 public:
@@ -655,12 +669,14 @@ public:
 	static unsigned int GenUUID();
 };
 
+}
+
 #ifdef IMPLEMENT_SLOW_EVALUATION
 
 Eigen::MatrixXd GetExpressionNumericDerivative(
 	const TMD::ExpressionPtr expression,
 	const TMD::VariableTable& table,
-	unsigned int uuid
+	unsigned int variable_id
 );
 
 #endif
