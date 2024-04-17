@@ -8,25 +8,20 @@
 	#include "FiniteDifference.hpp"
 #endif
 
-const double eps = 1e-10;
-
 namespace TMD {
 
 ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variable) {
-	auto org_expr = expression->Clone();
-	org_expr->MarkVariable(variable);
-	if (!org_expr->_has_variable) {
+	auto expr = expression;
+	expr = expr->MarkVariable(variable);
+	if (!expr->_has_variable) {
 		return nullptr;
 	}
-	auto diffed_expr = org_expr->Differentiate();
-	diffed_expr->MarkDifferential();
-
-	auto veced_expr = diffed_expr->Vectorize();
+	expr = expr->Differentiate();
+	expr = expr->MarkDifferential();
+	expr = expr->Vectorize();
 	auto result = Transpose::GetSelfType(
-		veced_expr->GetTransposedDerivative()
+		expr->GetTransposedDerivative()
 	);
-
-
 	return result;
 }
 
@@ -116,15 +111,15 @@ Expression::Expression(
 
 ExpressionPtr Expression::Substitute(
 	const std::map<unsigned int, ExpressionPtr> &subs
-) const {
+) {
 	std::map<unsigned int, ExpressionPtr> subed_exprs;
-	RealSubstitute(subs, subed_exprs);
+	return RealSubstitute(subs, subed_exprs);
 }
 
 ExpressionPtr Expression::RealSubstitute(
 	const std::map<unsigned int, ExpressionPtr> &subs,
 	std::map<unsigned int, ExpressionPtr> &subed_exprs
-) const {
+) {
 	auto itr = subed_exprs.find(_uuid);
 	if (itr != subed_exprs.end()) {
 		return itr->second;
@@ -213,7 +208,7 @@ ExpressionPtr SingleOpExpression::GetMarkedVariableExpression(
 	return GetSingleOpExpression(_child->RealMarkVariable(variable_id, marked_exprs));
 }
 
-ConstExpressionPtr SingleOpExpression::GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) const {
+ExpressionPtr SingleOpExpression::GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) {
 	auto new_child = _child->RealMarkDifferential(marked_exprs);
 	if (new_child != _child || _has_differential != _child->_has_differential) {
 		auto new_expr = GetSingleOpExpression(new_child);
@@ -519,7 +514,7 @@ ExpressionPtr DoubleOpExpression::GetMarkedVariableExpression(unsigned int varia
 	);
 }
 
-ConstExpressionPtr DoubleOpExpression::GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) const {
+ExpressionPtr DoubleOpExpression::GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) {
 	auto new_lhs = _lhs->RealMarkDifferential(marked_exprs);
 	auto new_rhs = _rhs->RealMarkDifferential(marked_exprs);
 	if (new_lhs != _lhs || new_rhs != _rhs || _has_differential != (new_lhs->_has_differential || new_rhs->_has_differential)) {
@@ -635,7 +630,7 @@ ExpressionPtr MatrixProduct::GetTransposedDerivative() const {
 	} else if (_lhs->_has_differential && !_rhs->_has_differential) {
 		throw std::logic_error("differential appears on lhs of matrix product");
 	} else if (!_lhs->_has_differential && _rhs->_has_differential) {
-		return GetSelfType(_lhs->Clone(), _rhs->GetTransposedDerivative());
+		return GetSelfType(_lhs, _rhs->GetTransposedDerivative());
 	} else {
 		throw std::logic_error("differential appears on both sides of matrix product");
 	}
@@ -968,9 +963,9 @@ ExpressionPtr LeafExpression::GetMarkedVariableExpression(
 	return new_expr;
 }
 
-ConstExpressionPtr LeafExpression::GetMarkedDifferentialExpression(
+ExpressionPtr LeafExpression::GetMarkedDifferentialExpression(
 	std::map<unsigned int, ExpressionPtr> &marked_exprs
-) const {
+) {
 	return shared_from_this();
 }
 

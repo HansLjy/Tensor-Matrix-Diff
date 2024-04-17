@@ -84,14 +84,14 @@ public:
 
 	ExpressionPtr MarkDifferential();
 	ExpressionPtr RealMarkDifferential(std::map<unsigned int, ExpressionPtr>& marked_exprs);
-	virtual ConstExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr>& marked_exprs) const = 0;
+	virtual ExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr>& marked_exprs) = 0;
 
 	ExpressionPtr Vectorize() const;
 	ExpressionPtr RealVectorize(std::map<unsigned int, ExpressionPtr>& veced_exprs) const;
 	virtual ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr>& veced_exprs) const = 0;
 
-	ExpressionPtr Substitute(const std::map<unsigned int, ExpressionPtr>& subs) const;
-	ExpressionPtr RealSubstitute(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs) const;
+	ExpressionPtr Substitute(const std::map<unsigned int, ExpressionPtr>& subs);
+	ExpressionPtr RealSubstitute(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs);
 	virtual ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs) = 0;
 
 	virtual ExpressionPtr GetTransposedDerivative() const;
@@ -129,7 +129,7 @@ public:
 class SingleOpExpression : public Expression {
 public:
 	ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
-	ConstExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) override;
 	ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr> &subs, std::map<unsigned int, ExpressionPtr> &subed_exprs) override;
 
 	void Print(std::ostream &out) const override = 0;
@@ -161,14 +161,32 @@ public:
 	void RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const override;
 };
 
-class Negate : public SingleOpExpression {
+template<class Derived>
+class ConcreteSingleOpExpression : public SingleOpExpression {
+public:
+	using SingleOpExpression::SingleOpExpression;
+	ExpressionPtr GetSingleOpExpression(ExpressionPtr child) const override {
+		return Derived::GetSelfType(child);
+	}
+
+	void Print(std::ostream &out) const override = 0;
+	ExpressionPtr Clone() const override = 0;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
+#endif
+};
+
+class Negate : public ConcreteSingleOpExpression<Negate> {
 public:
 	Negate(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
-		SingleOpExpression(kNegatePriority, ExpressionType::kNegateOp, "-", rows, cols, has_variable, has_differential, child) {}
+		ConcreteSingleOpExpression<Negate>(kNegatePriority, ExpressionType::kNegateOp, "-", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -182,14 +200,14 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
-class Inverse : public SingleOpExpression {
+class Inverse : public ConcreteSingleOpExpression<Inverse> {
 public:
 	Inverse(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
-		SingleOpExpression(kInversePriority, ExpressionType::kInverseOp, "\\text{inv}", rows, cols, has_variable, has_differential, child) {}
+		ConcreteSingleOpExpression<Inverse>(kInversePriority, ExpressionType::kInverseOp, "\\text{inv}", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -203,14 +221,14 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
-class Determinant : public SingleOpExpression {
+class Determinant : public ConcreteSingleOpExpression<Determinant> {
 public:
 	Determinant(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
-		SingleOpExpression(kDeterminantPriority, ExpressionType::kDeterminantOp, "\\det", rows, cols, has_variable, has_differential, child) {}
+		ConcreteSingleOpExpression<Determinant>(kDeterminantPriority, ExpressionType::kDeterminantOp, "\\det", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -224,14 +242,14 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
-class Vectorization : public SingleOpExpression {
+class Vectorization : public ConcreteSingleOpExpression<Vectorization> {
 public:
 	Vectorization(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
-		SingleOpExpression(kVectorizationPriority, ExpressionType::kDeterminantOp, "\\text{vec}", rows, cols, has_variable, has_differential, child) {}
+		ConcreteSingleOpExpression<Vectorization> (kVectorizationPriority, ExpressionType::kDeterminantOp, "\\text{vec}", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -245,14 +263,14 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
-class Transpose : public SingleOpExpression {
+class Transpose : public ConcreteSingleOpExpression<Transpose> {
 public:
 	Transpose(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
-		SingleOpExpression(kTransposePriority, ExpressionType::kTransposeOp, "\\top", rows, cols, has_variable, has_differential, child) {}
+		ConcreteSingleOpExpression<Transpose> (kTransposePriority, ExpressionType::kTransposeOp, "\\top", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -266,14 +284,14 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
-class Diagonalization : public SingleOpExpression {
+class Diagonalization : public ConcreteSingleOpExpression<Diagonalization> {
 public:
 	Diagonalization(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
-		SingleOpExpression(kDiagonalizePriority, ExpressionType::kDiagonalizeOp, "\\text{diag}", rows, cols, has_variable, has_differential, child) {}
+		ConcreteSingleOpExpression<Diagonalization>(kDiagonalizePriority, ExpressionType::kDiagonalizeOp, "\\text{diag}", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -287,14 +305,14 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
-class Skew : public SingleOpExpression {
+class Skew : public ConcreteSingleOpExpression<Skew> {
 public:
 	Skew(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
-		SingleOpExpression(
+		ConcreteSingleOpExpression<Skew> (
 			kSkewPriority, ExpressionType::kSkewOp,
 			"\\left[\\right]",
 			rows, cols,
@@ -313,14 +331,14 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr child);
 };
 
-class Exp : public SingleOpExpression {
+class Exp : public ConcreteSingleOpExpression<Exp> {
 public:
 	Exp(
 		int rows, int cols,
 		bool has_variable,
 		bool has_differential,
 		ExpressionPtr child):
-		SingleOpExpression(kExpPriority, ExpressionType::kExpOp, "\\exp", rows, cols, has_variable, has_differential, child) {}
+		ConcreteSingleOpExpression<Exp> (kExpPriority, ExpressionType::kExpOp, "\\exp", rows, cols, has_variable, has_differential, child) {}
 
 	void Print(std::ostream& out) const override;
 	ExpressionPtr Clone() const override;
@@ -349,13 +367,13 @@ public:
 		_lhs(lhs), _rhs(rhs), _operator_sym(operator_sym) {}
 
 	ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
-	ConstExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) override;
 	ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr> &subs, std::map<unsigned int, ExpressionPtr> &subed_exprs) override;
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
-	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
 
 	void RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const override;
 	
@@ -369,9 +387,26 @@ public:
 	const std::string _operator_sym;
 };
 
-class MatrixAddition : public DoubleOpExpression {
+template<class Derived>
+class ConcreteDoubleOpExpression : public DoubleOpExpression {
 public:
 	using DoubleOpExpression::DoubleOpExpression;
+	ExpressionPtr GetDoubleOpExpression(ExpressionPtr lhs, ExpressionPtr rhs) const override {
+		return Derived::GetSelfType(lhs, rhs);
+	}
+	
+	ExpressionPtr Clone() const override = 0;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
+	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
+#endif
+};
+
+class MatrixAddition : public ConcreteDoubleOpExpression<MatrixAddition> {
+public:
+	using ConcreteDoubleOpExpression<MatrixAddition>::ConcreteDoubleOpExpression;
 
 	ExpressionPtr GetTransposedDerivative() const override;
 
@@ -386,9 +421,9 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs);
 };
 
-class MatrixProduct : public DoubleOpExpression {
+class MatrixProduct : public ConcreteDoubleOpExpression<MatrixProduct> {
 public:
-	using DoubleOpExpression::DoubleOpExpression;
+	using ConcreteDoubleOpExpression<MatrixProduct>::ConcreteDoubleOpExpression;
 
 	ExpressionPtr GetTransposedDerivative() const override;
 
@@ -403,9 +438,9 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs);
 };
 
-class KroneckerProduct : public DoubleOpExpression {
+class KroneckerProduct : public ConcreteDoubleOpExpression<KroneckerProduct> {
 public:
-	using DoubleOpExpression::DoubleOpExpression;
+	using ConcreteDoubleOpExpression<KroneckerProduct>::ConcreteDoubleOpExpression;
 
 	ExpressionPtr Clone() const override;
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
@@ -418,10 +453,10 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs);
 };
 
-class ScalarMatrixProduct : public DoubleOpExpression {
+class ScalarMatrixProduct : public ConcreteDoubleOpExpression<ScalarMatrixProduct> {
 public:
 	// lhs will be the scalar
-	using DoubleOpExpression::DoubleOpExpression;
+	using ConcreteDoubleOpExpression<ScalarMatrixProduct>::ConcreteDoubleOpExpression;
 
 	ExpressionPtr Clone() const override;
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
@@ -435,9 +470,9 @@ public:
 };
 
 // WARNING: for now, the power has to be constant
-class MatrixScalarPower : public DoubleOpExpression {
+class MatrixScalarPower : public ConcreteDoubleOpExpression<MatrixScalarPower> {
 public:
-	using DoubleOpExpression::DoubleOpExpression;
+	using ConcreteDoubleOpExpression<MatrixScalarPower>::ConcreteDoubleOpExpression;
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
@@ -451,9 +486,9 @@ public:
 	static ExpressionPtr GetSelfType(ExpressionPtr matrix, ExpressionPtr power);
 };
 
-class HadamardProduct : public DoubleOpExpression {
+class HadamardProduct : public ConcreteDoubleOpExpression<HadamardProduct> {
 public:
-	using DoubleOpExpression::DoubleOpExpression;
+	using ConcreteDoubleOpExpression<HadamardProduct>::ConcreteDoubleOpExpression;
 	
 	ExpressionPtr Clone() const override;
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
@@ -479,7 +514,7 @@ public:
 		Expression(kLeafPriority, type, rows, cols, has_variable, has_differential) {}
 
 	ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
-	ConstExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
+	ExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr> &marked_exprs) override;
 	ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr> &subs, std::map<unsigned int, ExpressionPtr> &subed_exprs) override;
 
 	void Print(std::ostream &out) const override = 0;

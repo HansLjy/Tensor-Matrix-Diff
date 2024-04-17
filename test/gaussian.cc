@@ -9,26 +9,27 @@
 namespace fs = std::filesystem;
 
 int main() {
+	int variable_id = 0;
 	
 	// camera transformation
-	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), 3, 3);
-	auto b = TMD::Variable::GetSelfType("b", TMD::UUIDGenerator::GenUUID(), 3, 1);
+	auto A = TMD::Variable::GetSelfType("A", variable_id++, 3, 3);
+	auto b = TMD::Variable::GetSelfType("b", variable_id++, 3, 1);
 
 	// Gaussian configuration
-	auto q = TMD::Variable::GetSelfType("q", TMD::UUIDGenerator::GenUUID(), 4, 1);
-	auto S = TMD::Variable::GetSelfType("S", TMD::UUIDGenerator::GenUUID(), 3, 3);
-	auto p = TMD::Variable::GetSelfType("p", TMD::UUIDGenerator::GenUUID(), 3, 1);
+	auto q = TMD::Variable::GetSelfType("q", variable_id++, 4, 1);
+	auto S = TMD::Variable::GetSelfType("S", variable_id++, 3, 3);
+	auto p = TMD::Variable::GetSelfType("p", variable_id++, 3, 1);
 
 	// Other constant
-	auto gaussian_normalizer = TMD::Variable::GetSelfType("\\frac{1}{2 \\pi}", TMD::UUIDGenerator::GenUUID(), 1, 1);
+	auto gaussian_normalizer = TMD::Variable::GetSelfType("\\frac{1}{2 \\pi}", variable_id++, 1, 1);
 
 	// Selection Matrices
-	auto Sv = TMD::Variable::GetSelfType("\\mathcal{S}_v", TMD::UUIDGenerator::GenUUID(), 3, 4);
-	auto Sq0 = TMD::Variable::GetSelfType("\\mathcal{S}_{q_0}", TMD::UUIDGenerator::GenUUID(), 1, 4);
-	auto Sx1 = TMD::Variable::GetSelfType("\\mathcal{S}_{x_1}", TMD::UUIDGenerator::GenUUID(), 1, 3);
-	auto Sx2 = TMD::Variable::GetSelfType("\\mathcal{S}_{x_2}", TMD::UUIDGenerator::GenUUID(), 1, 3);
-	auto Sx3 = TMD::Variable::GetSelfType("\\mathcal{S}_{x_3}", TMD::UUIDGenerator::GenUUID(), 1, 3);
-	auto S2d = TMD::Variable::GetSelfType("\\mathcal{S}_{2d}", TMD::UUIDGenerator::GenUUID(), 2, 3);
+	auto Sv = TMD::Variable::GetSelfType("\\mathcal{S}_v", variable_id++, 3, 4);
+	auto Sq0 = TMD::Variable::GetSelfType("\\mathcal{S}_{q_0}", variable_id++, 1, 4);
+	auto Sx1 = TMD::Variable::GetSelfType("\\mathcal{S}_{x_1}", variable_id++, 1, 3);
+	auto Sx2 = TMD::Variable::GetSelfType("\\mathcal{S}_{x_2}", variable_id++, 1, 3);
+	auto Sx3 = TMD::Variable::GetSelfType("\\mathcal{S}_{x_3}", variable_id++, 1, 3);
+	auto S2d = TMD::Variable::GetSelfType("\\mathcal{S}_{2d}", variable_id++, 2, 3);
 
 	// R related
 	auto v = TMD::MatrixProduct::GetSelfType(Sv, q);
@@ -63,7 +64,7 @@ int main() {
 	);
 
 	// P related
-	auto x_of_P = TMD::Variable::GetSelfType("X", TMD::UUIDGenerator::GenUUID(), 3, 1);
+	auto x_of_P = TMD::Variable::GetSelfType("X", variable_id++, 3, 1);
 	auto x1 = TMD::MatrixProduct::GetSelfType(Sx1, x_of_P);
 	auto x2 = TMD::MatrixProduct::GetSelfType(Sx2, x_of_P);
 	auto x3 = TMD::MatrixProduct::GetSelfType(Sx2, x_of_P);
@@ -90,9 +91,9 @@ int main() {
 	auto J = TMD::GetDerivative(P, x_of_P->_uuid);
 
 	// gaussian related
-	auto x_of_gaussian = TMD::Variable::GetSelfType("x", TMD::UUIDGenerator::GenUUID(), 2, 1);
-	auto p_of_gaussian = TMD::Variable::GetSelfType("p", TMD::UUIDGenerator::GenUUID(), 2, 1);
-	auto V_of_gaussian = TMD::Variable::GetSelfType("V", TMD::UUIDGenerator::GenUUID(), 2, 2);
+	auto x_of_gaussian = TMD::Variable::GetSelfType("x", variable_id++, 2, 1);
+	auto p_of_gaussian = TMD::Variable::GetSelfType("p", variable_id++, 2, 1);
+	auto V_of_gaussian = TMD::Variable::GetSelfType("V", variable_id++, 2, 2);
 
 	auto x_minus_p = TMD::MatrixAddition::GetSelfType(x_of_gaussian, TMD::Negate::GetSelfType(p_of_gaussian));
 
@@ -126,7 +127,7 @@ int main() {
 	auto pi = TMD::MatrixProduct::GetSelfType(S2d, P->Substitute({{x_of_P->_uuid, Ap_plus_b}}));
 	
 	// variables
-	auto x = TMD::Variable::GetSelfType("x", TMD::UUIDGenerator::GenUUID(), 2, 1);
+	auto x = TMD::Variable::GetSelfType("x", variable_id++, 2, 1);
 	auto alpha = gaussian->Substitute({
 		{x_of_gaussian->_uuid, x},
 		{p_of_gaussian->_uuid, pi},

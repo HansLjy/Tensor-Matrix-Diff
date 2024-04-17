@@ -17,29 +17,30 @@ void GetDoubleOpDerivatives(
 	Eigen::MatrixXd& numeric_gradient_B,
 	Eigen::MatrixXd& analytic_gradient_B
 ) {
-	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), A_rows, A_cols);
-	auto B = TMD::Variable::GetSelfType("B", TMD::UUIDGenerator::GenUUID(), B_rows, B_cols);
+	int variable_id = 0;
+	auto A = TMD::Variable::GetSelfType("A", variable_id++, A_rows, A_cols);
+	auto B = TMD::Variable::GetSelfType("B", variable_id++, B_rows, B_cols);
 	AxB = Op::GetSelfType(A, B);
-	gradient_A = TMD::GetDerivative(AxB, A->_uuid);
-	gradient_B = TMD::GetDerivative(AxB, B->_uuid);
+	gradient_A = TMD::GetDerivative(AxB, A->_variable_id);
+	gradient_B = TMD::GetDerivative(AxB, B->_variable_id);
 	
 	TMD::VariableTable table;
 	
 	Eigen::MatrixXd A_mat = Eigen::MatrixXd::Random(A_rows, A_cols);
 	Eigen::MatrixXd B_mat = Eigen::MatrixXd::Random(B_rows, B_cols);
 	
-	table[A->_uuid] = A_mat;
-	table[B->_uuid] = B_mat;
+	table[A->_variable_id] = A_mat;
+	table[B->_variable_id] = B_mat;
 	
 	auto tmp_table = table;
 	
 	auto func_A = [&tmp_table, &A, &AxB] (const Eigen::MatrixXd& A_mat) -> Eigen::MatrixXd {
-		tmp_table[A->_uuid] = A_mat;
+		tmp_table[A->_variable_id] = A_mat;
 		return AxB->SlowEvaluation(tmp_table);
 	};
 	
 	auto func_B = [&tmp_table, &B, &AxB] (const Eigen::MatrixXd& B_mat) -> Eigen::MatrixXd {
-		tmp_table[B->_uuid] = B_mat;
+		tmp_table[B->_variable_id] = B_mat;
 		return AxB->SlowEvaluation(tmp_table);
 	};
 	
@@ -135,17 +136,18 @@ void GetSingleOpDerivative(
 	Eigen::MatrixXd& numeric_gradient_A,
 	Eigen::MatrixXd& analytic_gradient_A
 ) {
-	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), A_rows, A_cols);
+	int variable_id = 0;
+	auto A = TMD::Variable::GetSelfType("A", variable_id++, A_rows, A_cols);
 	op_A = Op::GetSelfType(A);
-	gradient_A = TMD::GetDerivative(op_A, A->_uuid);
+	gradient_A = TMD::GetDerivative(op_A, A->_variable_id);
 	
 	Eigen::MatrixXd A_mat = Eigen::MatrixXd::Random(A_rows, A_cols);
 	
 	TMD::VariableTable table;
-	table[A->_uuid] = A_mat;
+	table[A->_variable_id] = A_mat;
 	
 	auto func = [&table, &A, &op_A] (const Eigen::MatrixXd& A_mat) -> Eigen::MatrixXd {
-		table[A->_uuid] = A_mat;
+		table[A->_variable_id] = A_mat;
 		return op_A->SlowEvaluation(table);
 	};
 	
@@ -154,21 +156,22 @@ void GetSingleOpDerivative(
 }
 
 TEST(DerivativeTest, PowerTest) {
-	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), 4, 5);
+	int variable_id = 0;
+	auto A = TMD::Variable::GetSelfType("A", variable_id++, 4, 5);
 	auto B = TMD::RationalScalarConstant::GetSelfType(TMD::RationalScalarConstant::RationalNumber(1, 2));
 	auto AxB = TMD::MatrixScalarPower::GetSelfType(A, B);
 	
-	auto gradient = TMD::GetDerivative(AxB, A->_uuid);
+	auto gradient = TMD::GetDerivative(AxB, A->_variable_id);
 	
 	TMD::VariableTable table;
 	
 	Eigen::MatrixXd A_mat = Eigen::MatrixXd::Random(4, 5).cwiseAbs();
 	
-	table[A->_uuid] = A_mat;
+	table[A->_variable_id] = A_mat;
 	
 	auto tmp_table = table;
 	auto func = [&tmp_table, &A, &AxB] (const Eigen::MatrixXd& A_mat) -> Eigen::MatrixXd {
-		tmp_table[A->_uuid] = A_mat;
+		tmp_table[A->_variable_id] = A_mat;
 		return AxB->SlowEvaluation(tmp_table);
 	};
 	
@@ -275,13 +278,14 @@ TEST(DerivativeTest, DiagonalizeTest) {
 }
 
 TEST(FunctionalityTest, SubstitutionTest) {
-	auto A = TMD::Variable::GetSelfType("A", TMD::UUIDGenerator::GenUUID(), 4, 3);
-	auto B = TMD::Variable::GetSelfType("B", TMD::UUIDGenerator::GenUUID(), 3, 3);
-	auto a = TMD::Variable::GetSelfType("a", TMD::UUIDGenerator::GenUUID(), 4, 1);
-	auto b = TMD::Variable::GetSelfType("b", TMD::UUIDGenerator::GenUUID(), 3, 1);
+	int variable_id = 0;
+	auto A = TMD::Variable::GetSelfType("A", variable_id++, 4, 3);
+	auto B = TMD::Variable::GetSelfType("B", variable_id++, 3, 3);
+	auto a = TMD::Variable::GetSelfType("a", variable_id++, 4, 1);
+	auto b = TMD::Variable::GetSelfType("b", variable_id++, 3, 1);
 	
-	auto X = TMD::Variable::GetSelfType("X", TMD::UUIDGenerator::GenUUID(), 3, 1);
-	auto Y = TMD::Variable::GetSelfType("Y", TMD::UUIDGenerator::GenUUID(), 3, 1);
+	auto X = TMD::Variable::GetSelfType("X", variable_id++, 3, 1);
+	auto Y = TMD::Variable::GetSelfType("Y", variable_id++, 3, 1);
 	
 	auto AXpa = TMD::MatrixAddition::GetSelfType(
 		TMD::MatrixProduct::GetSelfType(A, X), a
@@ -291,7 +295,7 @@ TEST(FunctionalityTest, SubstitutionTest) {
 		TMD::MatrixProduct::GetSelfType(B, Y), b
 	);
 
-	auto subed = AXpa->Substitute({{X->_uuid, BYpb}});
+	auto subed = AXpa->Substitute({{X->_variable_id, BYpb}});
 	std::cerr << *subed << std::endl;
 
 	Eigen::MatrixXd A_mat = Eigen::MatrixXd::Random(4, 3);
@@ -303,15 +307,56 @@ TEST(FunctionalityTest, SubstitutionTest) {
 	Eigen::MatrixXd Y_mat = Eigen::MatrixXd::Random(3, 1);
 
 	TMD::VariableTable table;
-	table[A->_uuid] = A_mat;
-	table[B->_uuid] = B_mat;
-	table[a->_uuid] = a_mat;
-	table[b->_uuid] = b_mat;
-	table[X->_uuid] = X_mat;
-	table[Y->_uuid] = Y_mat;
+	table[A->_variable_id] = A_mat;
+	table[B->_variable_id] = B_mat;
+	table[a->_variable_id] = a_mat;
+	table[b->_variable_id] = b_mat;
+	table[X->_variable_id] = X_mat;
+	table[Y->_variable_id] = Y_mat;
 
 	auto result = subed->SlowEvaluation(table);
 	Eigen::MatrixXd expected = A_mat * (B_mat * Y_mat + b_mat) + a_mat;
 
 	EXPECT_LT((result - expected).norm(), 1e-5);
+}
+
+TEST(FunctionalityTest, COWTest) {
+	int variable_id = 0;
+	auto x = TMD::Variable::GetSelfType("x", variable_id++, 2, 1);
+	auto p = TMD::Variable::GetSelfType("p", variable_id++, 2, 1);
+	auto V = TMD::Variable::GetSelfType("V", variable_id++, 2, 2);
+
+	auto x_minus_p = TMD::MatrixAddition::GetSelfType(x, TMD::Negate::GetSelfType(p));
+
+	auto exp_part = TMD::Exp::GetSelfType(
+		TMD::ScalarMatrixProduct::GetSelfType(
+			TMD::RationalScalarConstant::GetSelfType(TMD::RationalScalarConstant::RationalNumber(-1, 2)),
+			TMD::GetMultipleProduct({
+				TMD::Transpose::GetSelfType(x_minus_p),
+				TMD::Inverse::GetSelfType(V),
+				x_minus_p
+			})
+		)
+	);
+
+	auto mult_part = TMD::MatrixScalarPower::GetSelfType(
+		TMD::Determinant::GetSelfType(V),
+		TMD::RationalScalarConstant::GetSelfType(
+			TMD::RationalScalarConstant::RationalNumber(-1, 2)
+		)
+	);
+
+	auto gaussian = TMD::MatrixProduct::GetSelfType(mult_part, exp_part);
+
+	std::stringstream strstrm;
+	gaussian->Print(strstrm);
+	std::string str_before = strstrm.str();
+
+	auto gaussian_derivative = TMD::GetDerivative(gaussian, V->_variable_id);
+	
+	strstrm.str(std::string());
+	gaussian->Print(strstrm);
+	std::string str_after = strstrm.str();
+
+	EXPECT_EQ(str_before, str_after);
 }
