@@ -79,9 +79,9 @@ public:
 	ExpressionPtr RealMarkVariable(unsigned int variable_id, std::map<unsigned int, ExpressionPtr>& marked_exprs) const;
 	virtual ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr>& marked_exprs) const = 0;
 
-	ExpressionPtr Differentiate() const;
-	ExpressionPtr RealDifferentiate(std::map<unsigned int, ExpressionPtr>& diffed_exprs) const;
-	virtual ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr>& diffed_exprs) const = 0;
+	ExpressionPtr Differentiate();
+	ExpressionPtr RealDifferentiate(std::map<unsigned int, ExpressionPtr>& diffed_exprs);
+	virtual ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr>& diffed_exprs) = 0;
 
 	ExpressionPtr MarkDifferential();
 	ExpressionPtr RealMarkDifferential(std::map<unsigned int, ExpressionPtr>& marked_exprs);
@@ -94,6 +94,10 @@ public:
 	ExpressionPtr Substitute(const std::map<unsigned int, ExpressionPtr>& subs);
 	ExpressionPtr RealSubstitute(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs);
 	virtual ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs) = 0;
+
+	ExpressionPtr Simplify();
+	ExpressionPtr RealSimplify(std::map<unsigned int, ExpressionPtr>& simplified_exprs);
+	virtual ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr>& simplified_exprs) = 0;
 
 	std::string ExportGraph() const;
 
@@ -160,12 +164,13 @@ public:
 
 	void Print(std::ostream &out) const override = 0;
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override = 0;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
 
 	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
 	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
 
+	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
 	void RealCountInDegree(std::set<unsigned int> &visited, std::map<unsigned int, int> &in_degrees) const override;
 
 	virtual ExpressionPtr GetSingleOpExpression(ExpressionPtr child) const = 0;
@@ -201,7 +206,7 @@ public:
 
 	void Print(std::ostream &out) const override = 0;
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override = 0;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -220,7 +225,7 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -241,7 +246,7 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -262,7 +267,7 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -283,7 +288,7 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -304,7 +309,7 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -325,7 +330,7 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -351,7 +356,7 @@ public:
 	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -372,7 +377,7 @@ public:
 
 	void Print(std::ostream& out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -402,12 +407,13 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override = 0;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
 
 	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
 	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
 
+	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
 	void RealCountInDegree(std::set<unsigned int> &visited, std::map<unsigned int, int> &in_degrees) const override;
 	
 	virtual ExpressionPtr GetDoubleOpExpression(ExpressionPtr lhs, ExpressionPtr rhs) const = 0;
@@ -427,9 +433,9 @@ public:
 	ExpressionPtr GetDoubleOpExpression(ExpressionPtr lhs, ExpressionPtr rhs) const override {
 		return Derived::GetSelfType(lhs, rhs);
 	}
-	
+
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override = 0;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -444,7 +450,7 @@ public:
 	ExpressionPtr GetTransposedDerivative() const override;
 
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -461,8 +467,10 @@ public:
 	ExpressionPtr GetTransposedDerivative() const override;
 
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
+
+	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -476,8 +484,10 @@ public:
 	using ConcreteDoubleOpExpression<KroneckerProduct>::ConcreteDoubleOpExpression;
 
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
+
+	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -492,7 +502,7 @@ public:
 	using ConcreteDoubleOpExpression<ScalarMatrixProduct>::ConcreteDoubleOpExpression;
 
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -509,7 +519,7 @@ public:
 
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -524,7 +534,7 @@ public:
 	using ConcreteDoubleOpExpression<HadamardProduct>::ConcreteDoubleOpExpression;
 	
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -552,12 +562,13 @@ public:
 
 	void Print(std::ostream &out) const override = 0;
 	ExpressionPtr Clone() const override = 0;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
 	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
 
+	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
 	void RealCountInDegree(std::set<unsigned int> &visited, std::map<unsigned int, int> &in_degrees) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -717,7 +728,7 @@ public:
 	
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
-	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
+	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION

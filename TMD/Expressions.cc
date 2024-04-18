@@ -74,6 +74,22 @@ std::map<unsigned int, int> Expression::CountInDegree() const {
 	return in_degrees;
 }
 
+ExpressionPtr Expression::Simplify() {
+	std::map<unsigned int, ExpressionPtr> simplified_exprs;
+	return RealSimplify(simplified_exprs);
+}
+
+ExpressionPtr Expression::RealSimplify(std::map<unsigned int, ExpressionPtr> &simplified_exprs) {
+	auto itr = simplified_exprs.find(_uuid);
+	if (itr != simplified_exprs.end()) {
+		return itr->second;
+	} else {
+		auto new_expr = GetSimplifedExpression(simplified_exprs);
+		simplified_exprs[_uuid] = new_expr;
+		return new_expr;
+	}
+}
+
 std::string Expression::ExportGraph() const {
 	std::stringstream out;
 
@@ -201,12 +217,12 @@ ExpressionPtr Expression::RealMarkVariable(
 	}
 }
 
-ExpressionPtr Expression::Differentiate() const {
+ExpressionPtr Expression::Differentiate() {
 	std::map<unsigned int, ExpressionPtr> diffed_exprs;
 	return RealDifferentiate(diffed_exprs);
 }
 
-ExpressionPtr Expression::RealDifferentiate(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr Expression::RealDifferentiate(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	auto itr = diffed_exprs.find(_uuid);
 	if (itr != diffed_exprs.end()) {
 		return itr->second;
@@ -298,6 +314,15 @@ void SingleOpExpression::GetExportedGraph(
 	tree_node_cnt++;
 }
 
+ExpressionPtr SingleOpExpression::GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) {
+	auto new_child = _child->RealSimplify(simplified_exprs);
+	if (new_child != _child) {
+		return GetSingleOpExpression(new_child);
+	} else {
+		return shared_from_this();
+	}
+}
+
 void SingleOpExpression::RealCountInDegree(
 	std::set<unsigned int> &visited,
 	std::map<unsigned int, int> &in_degrees
@@ -334,7 +359,7 @@ ExpressionPtr Negate::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-ExpressionPtr Negate::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr Negate::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	return GetSelfType(_child->RealDifferentiate(diffed_exprs));
 }
 
@@ -372,9 +397,9 @@ ExpressionPtr Inverse::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-ExpressionPtr Inverse::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
-	auto inv_child1 = GetSelfType(_child);
-	auto inv_child2 = GetSelfType(_child);
+ExpressionPtr Inverse::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
+	auto inv_child1 = shared_from_this();
+	auto inv_child2 = shared_from_this();
 	auto neg_inv_child1 = Negate::GetSelfType(inv_child1);
 	auto mult1 = MatrixProduct::GetSelfType(neg_inv_child1, _child->RealDifferentiate(diffed_exprs));
 	auto result = MatrixProduct::GetSelfType(mult1, inv_child2);
@@ -409,8 +434,8 @@ ExpressionPtr Determinant::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-ExpressionPtr Determinant::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
-	auto det_A = GetSelfType(_child);
+ExpressionPtr Determinant::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
+	auto det_A = shared_from_this();
 	auto trans_inv_A = Transpose::GetSelfType(Inverse::GetSelfType(_child));
 	auto vec_inv_A = Vectorization::GetSelfType(trans_inv_A);
 	auto trans_vec_inv_A = Transpose::GetSelfType(vec_inv_A);
@@ -447,7 +472,7 @@ ExpressionPtr Vectorization::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-ExpressionPtr Vectorization::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr Vectorization::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	return GetSelfType(_child->RealDifferentiate(diffed_exprs));
 }
 
@@ -478,7 +503,7 @@ ExpressionPtr Transpose::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-ExpressionPtr Transpose::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr Transpose::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	return GetSelfType(_child->RealDifferentiate(diffed_exprs));
 }
 
@@ -498,7 +523,7 @@ ExpressionPtr Diagonalization::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-ExpressionPtr Diagonalization::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr Diagonalization::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	return GetSelfType(_child->RealDifferentiate(diffed_exprs));
 }
 
@@ -541,7 +566,7 @@ ExpressionPtr Skew::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-ExpressionPtr Skew::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr Skew::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	return GetSelfType(_child->RealDifferentiate(diffed_exprs));
 }
 
@@ -562,9 +587,9 @@ ExpressionPtr Exp::Clone() const {
 	return GetSelfType(_child->Clone());
 }
 
-ExpressionPtr Exp::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr Exp::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	return HadamardProduct::GetSelfType(
-		GetSelfType(_child),
+		shared_from_this(),
 		_child->RealDifferentiate(diffed_exprs)
 	);
 }
@@ -616,6 +641,16 @@ void DoubleOpExpression::CollectExpressionIds(std::vector<unsigned int> &ids) co
 	ids.push_back(_uuid);
 	_lhs->CollectExpressionIds(ids);
 	_rhs->CollectExpressionIds(ids);
+}
+
+ExpressionPtr DoubleOpExpression::GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) {
+	auto new_lhs = _lhs->RealSimplify(simplified_exprs);
+	auto new_rhs = _rhs->RealSimplify(simplified_exprs);
+	if (new_lhs != _lhs || new_rhs != _rhs) {
+		return GetDoubleOpExpression(new_lhs, new_rhs);
+	} else {
+		return shared_from_this();
+	}
 }
 
 void DoubleOpExpression::RealCountInDegree(
@@ -708,7 +743,7 @@ ExpressionPtr MatrixAddition::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-ExpressionPtr MatrixAddition::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr MatrixAddition::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	if (_lhs->_has_variable && _rhs->_has_variable) {
 		return GetSelfType(_lhs->RealDifferentiate(diffed_exprs), _rhs->RealDifferentiate(diffed_exprs));
 	} else if (_lhs->_has_variable && !_rhs->_has_variable) {
@@ -761,7 +796,7 @@ ExpressionPtr MatrixProduct::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-ExpressionPtr MatrixProduct::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr MatrixProduct::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	if (_lhs->_has_variable && !_rhs->_has_variable) {
 		return GetSelfType(_lhs->RealDifferentiate(diffed_exprs), _rhs);
 	}
@@ -802,6 +837,22 @@ ExpressionPtr MatrixProduct::GetVecedExpression(std::map<unsigned int, Expressio
 	throw std::logic_error("vectorizing a matrix product without differentials");
 }
 
+ExpressionPtr MatrixProduct::GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) {
+	auto new_lhs = _lhs->GetSimplifedExpression(simplified_exprs);
+	auto new_rhs = _rhs->GetSimplifedExpression(simplified_exprs);
+	if (new_lhs->_type == ExpressionType::kIdentityMatrix) {
+		return new_rhs;
+	} else if (new_rhs->_type == ExpressionType::kIdentityMatrix) {
+		return new_lhs;
+	} else {
+		if (new_lhs != _lhs || new_rhs != _rhs) {
+			return GetSelfType(new_lhs, new_rhs);
+		} else {
+			return shared_from_this();
+		}
+	}
+}
+
 ExpressionPtr KroneckerProduct::GetSelfType(ExpressionPtr lhs, ExpressionPtr rhs) {
 	return std::make_shared<KroneckerProduct>(
 		kKroneckerProductPriority,
@@ -820,7 +871,7 @@ ExpressionPtr KroneckerProduct::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-ExpressionPtr KroneckerProduct::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr KroneckerProduct::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	if (_lhs->_has_variable && !_rhs->_has_variable) {
 		return GetSelfType(_lhs->RealDifferentiate(diffed_exprs), _rhs);
 	}
@@ -889,6 +940,22 @@ ExpressionPtr KroneckerProduct::GetVecedExpression(std::map<unsigned int, Expres
 	throw std::logic_error("vectorizing a Kronecker product without differentials");
 }
 
+ExpressionPtr KroneckerProduct::GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) {
+	auto new_lhs = _lhs->GetSimplifedExpression(simplified_exprs);
+	auto new_rhs = _rhs->GetSimplifedExpression(simplified_exprs);
+	if (new_lhs->_type == ExpressionType::kIdentityMatrix && new_lhs->_rows == 1) {
+		return new_rhs;
+	} else if (new_rhs->_type == ExpressionType::kIdentityMatrix && new_rhs->_rows == 1) {
+		return new_lhs;
+	} else {
+		if (new_lhs != _lhs || new_rhs != _rhs) {
+			return GetSelfType(new_lhs, new_rhs);
+		} else {
+			return shared_from_this();
+		}
+	}
+}
+
 ExpressionPtr ScalarMatrixProduct::GetSelfType(
 	ExpressionPtr scalar, ExpressionPtr matrix
 ) {
@@ -910,7 +977,7 @@ ExpressionPtr ScalarMatrixProduct::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-ExpressionPtr ScalarMatrixProduct::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr ScalarMatrixProduct::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	if (_lhs->_has_variable && !_rhs->_has_variable) {
 		return GetSelfType(_lhs->RealDifferentiate(diffed_exprs), _rhs);
 	}
@@ -974,7 +1041,7 @@ ExpressionPtr MatrixScalarPower::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-ExpressionPtr MatrixScalarPower::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr MatrixScalarPower::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	ExpressionPtr power_minus_1;
 	if (_rhs->_type == ExpressionType::kRationalScalarConstant) {
 		std::shared_ptr<RationalScalarConstant> rhs_copy = 
@@ -1004,7 +1071,7 @@ ExpressionPtr HadamardProduct::Clone() const {
 	return GetSelfType(_lhs->Clone(), _rhs->Clone());
 }
 
-ExpressionPtr HadamardProduct::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr HadamardProduct::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	if (_lhs->_has_variable && _rhs->_has_variable) {
 		return MatrixAddition::GetSelfType(
 			HadamardProduct::GetSelfType(_rhs, _lhs->RealDifferentiate(diffed_exprs)),
@@ -1101,6 +1168,10 @@ void LeafExpression::GetExportedGraph(
 	tree_node_cnt++;
 }
 
+ExpressionPtr LeafExpression::GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) {
+	return shared_from_this();
+}
+
 void LeafExpression::RealCountInDegree(
 	std::set<unsigned int> &visited,
 	std::map<unsigned int, int> &in_degrees
@@ -1109,7 +1180,7 @@ void LeafExpression::RealCountInDegree(
 	return;
 }
 
-ExpressionPtr LeafExpression::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr LeafExpression::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	throw std::logic_error("differentiating a leaf expression without variable");
 }
 
@@ -1284,7 +1355,7 @@ ExpressionPtr Variable::Clone() const {
 	return std::make_shared<Variable>(_rows, _cols, _has_variable, _has_differential, _name, _variable_id);
 }
 
-ExpressionPtr Variable::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {
+ExpressionPtr Variable::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) {
 	auto new_var = GetSelfType(_name, _variable_id, _rows, _cols);
 	new_var->_has_differential = true;
 	return new_var;

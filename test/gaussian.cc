@@ -144,7 +144,7 @@ int main() {
 	alpha_graph_file << alpha_graph_str;
 	alpha_graph_file.close();
 
-	auto alpha_gradient = TMD::GetDerivative(alpha, q->_variable_id);
+	auto alpha_gradient = TMD::GetDerivative(alpha, q->_variable_id)->Simplify();
 	auto alpha_gradient_graph_str = alpha_gradient->ExportGraph();
 	std::ofstream alpha_gradient_file(fs::path(TEST_OUTPUT_DIR) / "alpha-gradient.tex");
 	alpha_gradient_file << alpha_gradient_graph_str;
@@ -168,5 +168,16 @@ int main() {
 	auto analytic_gradient = alpha_gradient->SlowEvaluation(table);
 	std::cerr << numeric_gradient.transpose() << std::endl
 			  << analytic_gradient.transpose() << std::endl;
+	
+	auto alpha_hessian = TMD::GetDerivative(alpha_gradient, q->_variable_id)->Simplify();
+	auto alpha_hessian_graph_str = alpha_hessian->ExportGraph();
+	std::ofstream alpha_hessian_file(fs::path(TEST_OUTPUT_DIR) / "alpha-hessian.tex");
+	alpha_hessian_file << alpha_hessian_graph_str;
+	alpha_hessian_file.close();
+
+	auto numeric_hessian = TMD::GetExpressionNumericDerivative(alpha_gradient, table, q->_variable_id);
+	auto analytic_hessian = alpha_hessian->SlowEvaluation(table);
+	std::cerr << numeric_hessian << std::endl
+			  << analytic_hessian << std::endl;
 
 }
