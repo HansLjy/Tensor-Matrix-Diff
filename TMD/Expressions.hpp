@@ -94,11 +94,30 @@ public:
 	ExpressionPtr RealSubstitute(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs);
 	virtual ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs) = 0;
 
+	std::string ExportGraph() const;
+	virtual void CollectExpressionIds(std::vector<unsigned int>& ids) const = 0;
+	void RealExportGraph(
+		int& tree_cnt,
+		int cur_tree_id,
+		int &tree_node_cnt,
+		const std::map<unsigned int, unsigned int>& duplicated_expr_ids,
+		std::vector<bool>& duplicated_expr_exported,
+		std::vector<std::string>& labels,
+		std::stringstream& out
+	) const;
+	virtual void GetExportedGraph(
+		int& tree_cnt,
+		int cur_tree_id,
+		int& tree_node_cnt,
+		const std::map<unsigned int, unsigned int>& duplicated_expr_ids,
+		std::vector<bool>& duplicated_expr_exported,
+		std::vector<std::string>& labels,
+		std::stringstream& out
+	) const = 0;
+
 	virtual ExpressionPtr GetTransposedDerivative() const;
 
 	virtual void Print(std::ostream& out) const = 0;
-	std::string ExportGraph() const;
-	virtual void RealExportGraph(std::vector<std::string>& labels, std::stringstream& out) const = 0;
 	virtual ExpressionPtr Clone() const = 0;
 
 
@@ -137,6 +156,9 @@ public:
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
 
+	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
+	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
+
 	virtual ExpressionPtr GetSingleOpExpression(ExpressionPtr child) const = 0;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
@@ -158,7 +180,6 @@ public:
 		_operator_sym(operator_sym),
 		_child(child) {}
 	
-	void RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const override;
 };
 
 template<class Derived>
@@ -375,7 +396,8 @@ public:
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override = 0;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
 
-	void RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const override;
+	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
+	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
 	
 	virtual ExpressionPtr GetDoubleOpExpression(ExpressionPtr lhs, ExpressionPtr rhs) const = 0;
 
@@ -522,11 +544,12 @@ public:
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
+	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
+	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
+
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
 #endif
-
-	void RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const override;
 };
 
 class IdentityMatrix : public LeafExpression {

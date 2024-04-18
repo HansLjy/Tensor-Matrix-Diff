@@ -78,9 +78,31 @@ std::string Expression::ExportGraph() const {
 	
 	out << "\\begin{document}" << std::endl;
 
+	std::vector<unsigned int> expr_ids;
+	CollectExpressionIds(expr_ids);
+	
+	std::map<unsigned int, unsigned int> duplicated_expr_ids;
+	int duplicated_id_cnt = 0;
+	std::sort(expr_ids.begin(), expr_ids.end());
+	for (int i = 0; i < expr_ids.size() - 1; ) {
+		if (expr_ids[i] == expr_ids[i + 1]) {
+			duplicated_expr_ids[expr_ids[i]] = duplicated_id_cnt++;
+			i++;
+			while (i < expr_ids.size() && expr_ids[i] == expr_ids[i - 1]) {
+				i++;
+			}
+		} else {
+			i++;
+		}
+	}
+
+	std::vector<bool> duplicated_expr_exported(duplicated_id_cnt, false);
 	std::vector<std::string> labels;
+
 	std::stringstream real_out;
-	RealExportGraph(labels, real_out);
+	int tree_cnt = 1;
+	int tree_node_cnt = 0;
+	RealExportGraph(tree_cnt, 0, tree_node_cnt, duplicated_expr_ids, duplicated_expr_exported, labels, real_out);
 
 	for (unsigned int i = 0; i < labels.size(); i++) {
 		out << "\\psfrag{" << "label" << i << "}[cc][cc]{$"
@@ -94,6 +116,33 @@ std::string Expression::ExportGraph() const {
 	out << "\\end{document}" << std::endl;
 
 	return out.str();
+}
+
+void Expression::RealExportGraph(
+	int &tree_cnt,
+	int cur_tree_id,
+	int &tree_node_cnt,
+	const std::map<unsigned int, unsigned int> &duplicated_expr_ids,
+	std::vector<bool> &duplicated_expr_exported,
+	std::vector<std::string> &labels,
+	std::stringstream &out
+) const {
+	auto itr = duplicated_expr_ids.find(_uuid);
+	if (itr != duplicated_expr_ids.end()) {
+		const auto new_id = itr->second;
+		out << "nd" << cur_tree_id << "_" <<  tree_node_cnt << "[label = EXPR" << new_id << "]" << std::endl;
+		tree_node_cnt++;
+		if (!duplicated_expr_exported[new_id]) {
+			cur_tree_id = tree_cnt++;
+			int new_tree_node_cnt = 0;
+			GetExportedGraph(tree_cnt, cur_tree_id, new_tree_node_cnt, duplicated_expr_ids, duplicated_expr_exported, labels, out);
+			out << "nd" << cur_tree_id << "[label = EXPR" << new_id << "]" << std::endl;
+			out << "nd" << cur_tree_id << " -> " << "nd" << cur_tree_id << "_" << new_tree_node_cnt - 1 << ";" << std::endl;
+			duplicated_expr_exported[new_id] = true;
+		}
+	} else {
+		GetExportedGraph(tree_cnt, cur_tree_id, tree_node_cnt, duplicated_expr_ids, duplicated_expr_exported, labels, out);
+	}
 }
 
 Expression::Expression(
@@ -227,13 +276,27 @@ ExpressionPtr SingleOpExpression::GetSubedExpression(const std::map<unsigned int
 	}
 }
 
-void SingleOpExpression::RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const {
-	unsigned int cur_node_id = labels.size();
-	out << "nd" << cur_node_id << "[label = label" << cur_node_id << "]" << std::endl;
+void SingleOpExpression::CollectExpressionIds(std::vector<unsigned int> &ids) const {
+	ids.push_back(_uuid);
+	_child->CollectExpressionIds(ids);
+}
+
+void SingleOpExpression::GetExportedGraph(
+	int &tree_cnt,
+	int cur_tree_id,
+	int& tree_node_cnt,
+	const std::map<unsigned int, unsigned int> &duplicated_expr_ids,
+	std::vector<bool> &duplicated_expr_exported,
+	std::vector<std::string> &labels,
+	std::stringstream &out
+) const {
+	const int label_id = labels.size();
 	labels.push_back(_operator_sym);
-	unsigned int child_node_id = labels.size();
-	_child->RealExportGraph(labels, out);
-	out << "nd" << cur_node_id << " -> " << "nd" << child_node_id << ";" << std::endl;
+	_child->RealExportGraph(tree_cnt, cur_tree_id, tree_node_cnt, duplicated_expr_ids, duplicated_expr_exported, labels, out);
+	const int child_id = tree_node_cnt - 1;
+	out << "nd" << cur_tree_id << "_" << tree_node_cnt << "[label = label" << label_id << "]" << std::endl;
+	out << "nd" << cur_tree_id << "_" << tree_node_cnt << " -> " << "nd" << cur_tree_id << "_" << child_id << ";" << std::endl;
+	tree_node_cnt++;
 }
 
 ExpressionPtr Negate::GetSelfType(ExpressionPtr child) {
@@ -538,16 +601,32 @@ ExpressionPtr DoubleOpExpression::GetSubedExpression(
 	}
 }
 
-void DoubleOpExpression::RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const {
-	unsigned int cur_node_id = labels.size();
-	out << "nd" << cur_node_id << "[label = label" << cur_node_id << "]" << std::endl;
+void DoubleOpExpression::CollectExpressionIds(std::vector<unsigned int> &ids) const {
+	ids.push_back(_uuid);
+	_lhs->CollectExpressionIds(ids);
+	_rhs->CollectExpressionIds(ids);
+}
+
+void DoubleOpExpression::GetExportedGraph(
+	int &tree_cnt,
+	int cur_tree_id,
+	int& tree_node_cnt,
+	const std::map<unsigned int, unsigned int> &duplicated_expr_ids,
+	std::vector<bool> &duplicated_expr_exported,
+	std::vector<std::string> &labels,
+	std::stringstream &out
+) const {
+	const int label_id = labels.size();
 	labels.push_back(_operator_sym);
-	unsigned int lhs_node_id = labels.size();
-	_lhs->RealExportGraph(labels, out);
-	unsigned int rhs_node_id = labels.size();
-	_rhs->RealExportGraph(labels, out);
-	out << "nd" << cur_node_id << " -> " << "nd" << lhs_node_id << ";" << std::endl;
-	out << "nd" << cur_node_id << " -> " << "nd" << rhs_node_id << ";" << std::endl;
+	_lhs->RealExportGraph(tree_cnt, cur_tree_id, tree_node_cnt, duplicated_expr_ids, duplicated_expr_exported, labels, out);
+	const int lhs_node_id = tree_node_cnt - 1;
+	_rhs->RealExportGraph(tree_cnt, cur_tree_id, tree_node_cnt, duplicated_expr_ids, duplicated_expr_exported, labels, out);
+	const int rhs_node_id = tree_node_cnt - 1;
+
+	out << "nd" << cur_tree_id << "_" << tree_node_cnt << "[label = label" << label_id << "]" << std::endl;
+	out << "nd" << cur_tree_id << "_" << tree_node_cnt << " -> " << "nd" << cur_tree_id << "_" << lhs_node_id << ";" << std::endl;
+	out << "nd" << cur_tree_id << "_" << tree_node_cnt << " -> " << "nd" << cur_tree_id << "_" << rhs_node_id << ";" << std::endl;
+	tree_node_cnt++;
 }
 
 void DoubleOpExpression::Print(std::ostream &out) const {
@@ -976,12 +1055,25 @@ ExpressionPtr LeafExpression::GetSubedExpression(
 	return shared_from_this();
 }
 
-void LeafExpression::RealExportGraph(std::vector<std::string> &labels, std::stringstream &out) const {
-	unsigned int cur_node_id = labels.size();
+void LeafExpression::CollectExpressionIds(std::vector<unsigned int> &ids) const {
+	// we do not collect uuids of the leaves so that they never get aliased
+}
+
+void LeafExpression::GetExportedGraph(
+	int &tree_cnt,
+	int cur_tree_id,
+	int &tree_node_cnt,
+	const std::map<unsigned int, unsigned int> &duplicated_expr_ids,
+	std::vector<bool> &duplicated_expr_exported,
+	std::vector<std::string> &labels,
+	std::stringstream &out
+) const {
+	const int label_id = labels.size();
 	std::stringstream cur_out;
 	Print(cur_out);
 	labels.push_back(cur_out.str());
-	out << "nd" << cur_node_id << "[label = label" << cur_node_id << "]" << std::endl;
+	out << "nd" << cur_tree_id << "_" << tree_node_cnt << "[label = label" << label_id << "]" << std::endl;
+	tree_node_cnt++;
 }
 
 ExpressionPtr LeafExpression::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {

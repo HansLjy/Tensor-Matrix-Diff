@@ -88,7 +88,7 @@ int main() {
 			TMD::ElementMatrix::GetSelfType(2, 0, 3, 1)
 		)
 	});
-	auto J = TMD::GetDerivative(P, x_of_P->_uuid);
+	auto J = TMD::GetDerivative(P, x_of_P->_variable_id);
 
 	// gaussian related
 	auto x_of_gaussian = TMD::Variable::GetSelfType("x", variable_id++, 2, 1);
@@ -117,21 +117,26 @@ int main() {
 
 	auto gaussian = TMD::MatrixProduct::GetSelfType(mult_part, exp_part);
 
+	auto gaussian_graph_str = TMD::GetDerivative(gaussian, V_of_gaussian->_variable_id)->ExportGraph();
+	std::ofstream gaussian_graph_file(fs::path(TEST_OUTPUT_DIR) / "gaussian.tex");
+	gaussian_graph_file << gaussian_graph_str;
+	gaussian_graph_file.close();
+
 	// finally!
 	auto Ap_plus_b = TMD::MatrixAddition::GetSelfType(
 		TMD::MatrixProduct::GetSelfType(A, p), b
 	);
-	auto Jc = J->Substitute({{x_of_P->_uuid, Ap_plus_b}});
+	auto Jc = J->Substitute({{x_of_P->_variable_id, Ap_plus_b}});
 	auto SJARS = TMD::GetMultipleProduct({S2d, Jc, A, R, S});
 	auto Vi = TMD::MatrixProduct::GetSelfType(SJARS, TMD::Transpose::GetSelfType(SJARS));
-	auto pi = TMD::MatrixProduct::GetSelfType(S2d, P->Substitute({{x_of_P->_uuid, Ap_plus_b}}));
+	auto pi = TMD::MatrixProduct::GetSelfType(S2d, P->Substitute({{x_of_P->_variable_id, Ap_plus_b}}));
 	
 	// variables
 	auto x = TMD::Variable::GetSelfType("x", variable_id++, 2, 1);
 	auto alpha = gaussian->Substitute({
-		{x_of_gaussian->_uuid, x},
-		{p_of_gaussian->_uuid, pi},
-		{V_of_gaussian->_uuid, Vi}
+		{x_of_gaussian->_variable_id, x},
+		{p_of_gaussian->_variable_id, pi},
+		{V_of_gaussian->_variable_id, Vi}
 	});
 
 	auto alpha_graph_str = alpha->ExportGraph();
@@ -139,27 +144,27 @@ int main() {
 	alpha_graph_file << alpha_graph_str;
 	alpha_graph_file.close();
 
-	auto alpha_gradient = TMD::GetDerivative(alpha, q->_uuid);
+	auto alpha_gradient = TMD::GetDerivative(alpha, q->_variable_id);
 	auto alpha_gradient_graph_str = alpha_gradient->ExportGraph();
 	std::ofstream alpha_gradient_file(fs::path(TEST_OUTPUT_DIR) / "alpha-gradient.tex");
 	alpha_gradient_file << alpha_gradient_graph_str;
 	alpha_gradient_file.close();
 
 	TMD::VariableTable table;
-	table[A->_uuid] = Eigen::MatrixXd::Random(3, 3);
-	table[b->_uuid] = Eigen::MatrixXd::Random(3, 1);
-	table[q->_uuid] = Eigen::MatrixXd::Random(4, 1);
-	table[S->_uuid] = Eigen::MatrixXd::Random(3, 3);
-	table[p->_uuid] = Eigen::MatrixXd::Random(3, 1);
-	table[Sv->_uuid] = Eigen::MatrixXd::Random(3, 4);
-	table[Sq0->_uuid] = Eigen::MatrixXd::Random(1, 4);
-	table[Sx1->_uuid] = Eigen::MatrixXd::Random(1, 3);
-	table[Sx2->_uuid] = Eigen::MatrixXd::Random(1, 3);
-	table[Sx3->_uuid] = Eigen::MatrixXd::Random(1, 3);
-	table[S2d->_uuid] = Eigen::MatrixXd::Random(2, 3);
-	table[x->_uuid] = Eigen::MatrixXd::Random(2, 1);
+	table[A->_variable_id] = Eigen::MatrixXd::Random(3, 3);
+	table[b->_variable_id] = Eigen::MatrixXd::Random(3, 1);
+	table[q->_variable_id] = Eigen::MatrixXd::Random(4, 1);
+	table[S->_variable_id] = Eigen::MatrixXd::Random(3, 3);
+	table[p->_variable_id] = Eigen::MatrixXd::Random(3, 1);
+	table[Sv->_variable_id] = Eigen::MatrixXd::Random(3, 4);
+	table[Sq0->_variable_id] = Eigen::MatrixXd::Random(1, 4);
+	table[Sx1->_variable_id] = Eigen::MatrixXd::Random(1, 3);
+	table[Sx2->_variable_id] = Eigen::MatrixXd::Random(1, 3);
+	table[Sx3->_variable_id] = Eigen::MatrixXd::Random(1, 3);
+	table[S2d->_variable_id] = Eigen::MatrixXd::Random(2, 3);
+	table[x->_variable_id] = Eigen::MatrixXd::Random(2, 1);
 
-	auto numeric_gradient = TMD::GetExpressionNumericDerivative(alpha, table, q->_uuid);
+	auto numeric_gradient = TMD::GetExpressionNumericDerivative(alpha, table, q->_variable_id);
 	auto analytic_gradient = alpha_gradient->SlowEvaluation(table);
 	std::cerr << numeric_gradient.transpose() << std::endl
 			  << analytic_gradient.transpose() << std::endl;
