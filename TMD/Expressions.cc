@@ -10,6 +10,132 @@
 
 namespace TMD {
 
+
+ExpressionPtr GetNegate(const ExpressionPtr expr) {
+	return internal::Negate::GetSelfType(expr);
+}
+
+ExpressionPtr GetInverse(const ExpressionPtr expr) {
+	return internal::Inverse::GetSelfType(expr);
+}
+
+ExpressionPtr GetDeterminant(const ExpressionPtr expr) {
+	return internal::Determinant::GetSelfType(expr);
+}
+
+ExpressionPtr GetVectorization(const ExpressionPtr expr) {
+	return internal::Vectorization::GetSelfType(expr);
+}
+
+ExpressionPtr GetTranspose(const ExpressionPtr expr) {
+	return internal::Transpose::GetSelfType(expr);
+}
+
+ExpressionPtr GetDiagonalization(const ExpressionPtr expr) {
+	return internal::Diagonalization::GetSelfType(expr);
+}
+
+ExpressionPtr GetSkew(const ExpressionPtr expr) {
+	return internal::Skew::GetSelfType(expr);
+}
+
+ExpressionPtr GetExp(const ExpressionPtr expr) {
+	return internal::Exp::GetSelfType(expr);
+}
+
+ExpressionPtr GetVector2Norm(const ExpressionPtr x) {
+	if (x->_cols != 1) {
+		throw std::logic_error("getting vector norm of a non-vector");
+	}
+	return internal::MatrixScalarPower::GetSelfType(
+		GetDotProduct(x, x),
+		internal::RationalScalarConstant::GetSelfType({1, 2})
+	);
+}
+
+ExpressionPtr GetScalarProduct(const ExpressionPtr scalar, const ExpressionPtr matrix) {
+	return internal::ScalarMatrixProduct::GetSelfType(scalar, matrix);
+}
+
+ExpressionPtr GetPower(const ExpressionPtr matrix, const ExpressionPtr power) {
+	return internal::MatrixScalarPower::GetSelfType(matrix, power);
+}
+
+ExpressionPtr GetHadamardProduct(const ExpressionPtr lhs, const ExpressionPtr rhs) {
+	return internal::HadamardProduct::GetSelfType(lhs, rhs);
+}
+
+ExpressionPtr GetMinus(const ExpressionPtr lhs, const ExpressionPtr rhs) {
+	return internal::MatrixAddition::GetSelfType(
+		lhs, internal::Negate::GetSelfType(rhs)
+	);
+}
+
+ExpressionPtr GetDotProduct(const ExpressionPtr lhs, const ExpressionPtr rhs) {
+	if (lhs->_rows != rhs->_rows || lhs->_cols != 1 || rhs->_cols != 1) {
+		throw std::logic_error("dot producting two matrices with invalid shape");
+	}
+	return internal::MatrixProduct::GetSelfType(
+		internal::Transpose::GetSelfType(lhs),
+		rhs
+	);
+}
+
+ExpressionPtr GetProduct(const std::vector<ExpressionPtr> &prods) {
+	if (prods.size() < 2) {
+		throw std::logic_error("not enough operands");
+	}
+	auto result = internal::MatrixProduct::GetSelfType(prods[0], prods[1]);
+	for (unsigned int i = 2; i < prods.size(); i++) {
+		result = internal::MatrixProduct::GetSelfType(result, prods[i]);
+	}
+	return result;
+}
+
+ExpressionPtr GetAddition(const std::vector<ExpressionPtr> &adds) {
+	if (adds.size() < 2) {
+		throw std::logic_error("not enough operands");
+	}
+	auto result = internal::MatrixAddition::GetSelfType(adds[0], adds[1]);
+	for (unsigned int i = 2; i < adds.size(); i++) {
+		result = internal::MatrixAddition::GetSelfType(result, adds[i]);
+	}
+	return result;
+}
+
+VariablePtr GetVariable(const std::string &name, unsigned int variable_id, int rows, int cols) {
+	return internal::Variable::GetSelfType(name, variable_id, rows, cols);
+}
+
+ExpressionPtr GetIdeneityMatrix(int order) {
+	return internal::IdentityMatrix::GetSelfType(order);
+}
+
+ExpressionPtr GetCommutationMatrix(int m, int n) {
+	return internal::CommutationMatrix::GetSelfType(m, n);
+}
+
+ExpressionPtr GetDiagonalizationMatrix(int order) {
+	return internal::DiagonalizationMatrix::GetSelfType(order);
+}
+
+ExpressionPtr GetSkewMatrix() {
+	return internal::SkewMatrix::GetSelfType();
+}
+
+ExpressionPtr GetElementMatrix(int element_row, int element_col, int rows, int cols) {
+	return internal::ElementMatrix::GetSelfType(element_row, element_col, rows, cols);
+}
+
+ExpressionPtr GetRationalScalarConstant(int n) {
+	return internal::RationalScalarConstant::GetSelfType(internal::RationalScalarConstant::RationalNumber(n));
+}
+
+ExpressionPtr GetRationalScalarConstant(int p, int q) {
+	return internal::RationalScalarConstant::GetSelfType(internal::RationalScalarConstant::RationalNumber(p, q));
+}
+
+
 ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variable) {
 	auto expr = expression;
 	expr = expr->MarkVariable(variable);
@@ -19,53 +145,12 @@ ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variabl
 	expr = expr->Differentiate();
 	expr = expr->MarkDifferential();
 	expr = expr->Vectorize();
-	auto result = Transpose::GetSelfType(
+	auto result = internal::Transpose::GetSelfType(
 		expr->GetTransposedDerivative()
 	);
 	return result;
 }
 
-ExpressionPtr GetDotProduct(const ExpressionPtr lhs, const ExpressionPtr rhs) {
-	if (lhs->_rows != rhs->_rows || lhs->_cols != 1 || rhs->_cols != 1) {
-		throw std::logic_error("dot producting two matrices with invalid shape");
-	}
-	return MatrixProduct::GetSelfType(
-		Transpose::GetSelfType(lhs),
-		rhs
-	);
-}
-
-ExpressionPtr GetVector2Norm(const ExpressionPtr x) {
-	if (x->_cols != 1) {
-		throw std::logic_error("getting vector norm of a non-vector");
-	}
-	return MatrixScalarPower::GetSelfType(
-		GetDotProduct(x, x),
-		RationalScalarConstant::GetSelfType({1, 2})
-	);
-}
-
-ExpressionPtr GetMultipleProduct(const std::vector<ExpressionPtr> &prods) {
-	if (prods.size() < 2) {
-		throw std::logic_error("not enough operands");
-	}
-	auto result = MatrixProduct::GetSelfType(prods[0], prods[1]);
-	for (unsigned int i = 2; i < prods.size(); i++) {
-		result = MatrixProduct::GetSelfType(result, prods[i]);
-	}
-	return result;
-}
-
-ExpressionPtr GetMultipleAddition(const std::vector<ExpressionPtr> &adds) {
-	if (adds.size() < 2) {
-		throw std::logic_error("not enough operands");
-	}
-	auto result = MatrixAddition::GetSelfType(adds[0], adds[1]);
-	for (unsigned int i = 2; i < adds.size(); i++) {
-		result = MatrixAddition::GetSelfType(result, adds[i]);
-	}
-	return result;
-}
 
 std::map<unsigned int, int> Expression::CountInDegree() const {
 	std::map<unsigned int, int> in_degrees;
@@ -265,6 +350,8 @@ ExpressionPtr Expression::RealVectorize(std::map<unsigned int, ExpressionPtr> &v
 	}
 }
 
+namespace internal {
+
 ExpressionPtr SingleOpExpression::GetMarkedVariableExpression(
 	unsigned int variable_id,
 	std::map<unsigned int, ExpressionPtr> &marked_exprs
@@ -289,11 +376,6 @@ ExpressionPtr SingleOpExpression::GetSubedExpression(const std::map<unsigned int
 	} else {
 		return shared_from_this();
 	}
-}
-
-void SingleOpExpression::CollectExpressionIds(std::vector<unsigned int> &ids) const {
-	ids.push_back(_uuid);
-	_child->CollectExpressionIds(ids);
 }
 
 void SingleOpExpression::GetExportedGraph(
@@ -635,12 +717,6 @@ ExpressionPtr DoubleOpExpression::GetSubedExpression(
 	} else {
 		return shared_from_this();
 	}
-}
-
-void DoubleOpExpression::CollectExpressionIds(std::vector<unsigned int> &ids) const {
-	ids.push_back(_uuid);
-	_lhs->CollectExpressionIds(ids);
-	_rhs->CollectExpressionIds(ids);
 }
 
 ExpressionPtr DoubleOpExpression::GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) {
@@ -1147,10 +1223,6 @@ ExpressionPtr LeafExpression::GetSubedExpression(
 	return shared_from_this();
 }
 
-void LeafExpression::CollectExpressionIds(std::vector<unsigned int> &ids) const {
-	// we do not collect uuids of the leaves so that they never get aliased
-}
-
 void LeafExpression::GetExportedGraph(
 	int &tree_cnt,
 	int cur_tree_id,
@@ -1370,17 +1442,11 @@ std::ostream& operator<<(std::ostream& out, const Expression& expr) {
 	return out;
 }
 
-namespace internal {
-
 unsigned int UUIDGenerator::_cnt = 0;
 
 unsigned int UUIDGenerator::GenUUID() {
 	return _cnt++;
 }
-
-}
-
-
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 
@@ -1492,6 +1558,11 @@ Eigen::MatrixXd Variable::SlowEvaluation(const VariableTable& table) const {
 		return itr->second;
 	}
 }
+
+#endif
+}
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
 
 Eigen::MatrixXd GetExpressionNumericDerivative(
 	const TMD::ExpressionPtr expression,

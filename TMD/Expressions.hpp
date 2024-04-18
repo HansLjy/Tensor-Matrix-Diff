@@ -11,41 +11,171 @@
 
 namespace TMD {
 
-
-#ifdef IMPLEMENT_SLOW_EVALUATION
-	typedef std::map<unsigned int, Eigen::MatrixXd> VariableTable;
-#endif
-
 class Expression;
+namespace internal {
+	class Variable;
+}
+
 typedef std::shared_ptr<Expression> ExpressionPtr;
 typedef std::shared_ptr<const Expression> ConstExpressionPtr;
+typedef std::shared_ptr<internal::Variable> VariablePtr;
+typedef std::shared_ptr<const internal::Variable> ConstVariablePtr;
 
-// return nullptr if the expression does not contain the variable
+#ifdef IMPLEMENT_SLOW_EVALUATION
+
+typedef std::map<unsigned int, Eigen::MatrixXd> VariableTable;
+
+Eigen::MatrixXd GetExpressionNumericDerivative(
+	const ExpressionPtr expression,
+	const VariableTable& table,
+	unsigned int variable_id
+);
+
+#endif
+
+// single op
+ExpressionPtr GetNegate(const ExpressionPtr expr);
+ExpressionPtr GetInverse(const ExpressionPtr expr);
+ExpressionPtr GetDeterminant(const ExpressionPtr expr);
+ExpressionPtr GetVectorization(const ExpressionPtr expr);
+ExpressionPtr GetTranspose(const ExpressionPtr expr);
+ExpressionPtr GetDiagonalization(const ExpressionPtr expr);
+ExpressionPtr GetSkew(const ExpressionPtr expr);
+ExpressionPtr GetExp(const ExpressionPtr expr);
+
+ExpressionPtr GetVector2Norm(const ExpressionPtr x);
+
+// double op
+ExpressionPtr GetAddition(const std::vector<ExpressionPtr>& adds);
+ExpressionPtr GetProduct(const std::vector<ExpressionPtr>& prods);
+ExpressionPtr GetScalarProduct(const ExpressionPtr scalar, const ExpressionPtr matrix);
+ExpressionPtr GetPower(const ExpressionPtr matrix, const ExpressionPtr power);
+ExpressionPtr GetHadamardProduct(const ExpressionPtr lhs, const ExpressionPtr rhs);
+
+ExpressionPtr GetMinus(const ExpressionPtr lhs, const ExpressionPtr rhs);
+ExpressionPtr GetDotProduct(const ExpressionPtr lhs, const ExpressionPtr rhs);
+
+// leaf
+VariablePtr GetVariable(const std::string& name, unsigned int variable_id, int rows, int cols);
+ExpressionPtr GetIdeneityMatrix(int order);
+ExpressionPtr GetCommutationMatrix(int m, int n);
+ExpressionPtr GetDiagonalizationMatrix(int order);
+ExpressionPtr GetSkewMatrix();
+ExpressionPtr GetElementMatrix(int element_row, int element_col, int rows, int cols);
+ExpressionPtr GetRationalScalarConstant(int n);
+ExpressionPtr GetRationalScalarConstant(int p, int q);
+
+// taking derivatives
 ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variable);
 
-enum class ExpressionType {
-	kNegateOp,
-	kInverseOp,
-	kDeterminantOp,
-	kVectorizationOp,
-	kTransposeOp,
-	kDiagonalizeOp,
-	kSkewOp,
-	kExpOp,
-	kMatrixAdditionOp,
-	kMatrixProductOp,
-	kKroneckerProductOp,
-	kMatrixScalarPower,
-	kScalarMatrixProductOp,
-	kHadamardProductOp,
-	kIdentityMatrix,
-	kCommutationMatrix,
-	kDiagonalizationMatrix,
-	kSkewMatrix,
-	kElementMatrix,
-	kRationalScalarConstant,
-	kVariable
+class Expression : public std::enable_shared_from_this<Expression> {
+public:
+	ExpressionPtr MarkVariable(unsigned int variable_id) const;
+	ExpressionPtr Differentiate();
+	ExpressionPtr MarkDifferential();
+	ExpressionPtr Vectorize() const;
+	ExpressionPtr Substitute(const std::map<unsigned int, ExpressionPtr>& subs);
+	ExpressionPtr Simplify();
+	std::string ExportGraph() const;
+	virtual ExpressionPtr GetTransposedDerivative() const;
+
+	virtual void Print(std::ostream& out) const = 0;
+	virtual ExpressionPtr Clone() const = 0;
+
+#ifdef IMPLEMENT_SLOW_EVALUATION
+	virtual Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const = 0;
+#endif
+
+	virtual ~Expression() = default;
+
+public:
+	ExpressionPtr RealMarkVariable(unsigned int variable_id, std::map<unsigned int, ExpressionPtr>& marked_exprs) const;
+	virtual ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr>& marked_exprs) const = 0;
+
+	ExpressionPtr RealDifferentiate(std::map<unsigned int, ExpressionPtr>& diffed_exprs);
+	virtual ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr>& diffed_exprs) = 0;
+
+	ExpressionPtr RealMarkDifferential(std::map<unsigned int, ExpressionPtr>& marked_exprs);
+	virtual ExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr>& marked_exprs) = 0;
+
+	ExpressionPtr RealVectorize(std::map<unsigned int, ExpressionPtr>& veced_exprs) const;
+	virtual ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr>& veced_exprs) const = 0;
+
+	ExpressionPtr RealSubstitute(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs);
+	virtual ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs) = 0;
+
+	ExpressionPtr RealSimplify(std::map<unsigned int, ExpressionPtr>& simplified_exprs);
+	virtual ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr>& simplified_exprs) = 0;
+
+	std::map<unsigned int, int> CountInDegree() const;
+	virtual void RealCountInDegree(
+		std::set<unsigned int>& visited,
+		std::map<unsigned int, int>& in_degrees
+	) const = 0;
+	void RealExportGraph(
+		int& tree_cnt,
+		int cur_tree_id,
+		int &tree_node_cnt,
+		const std::map<unsigned int, unsigned int>& duplicated_expr_ids,
+		std::vector<bool>& duplicated_expr_exported,
+		std::vector<std::string>& labels,
+		std::stringstream& out
+	) const;
+	virtual void GetExportedGraph(
+		int& tree_cnt,
+		int cur_tree_id,
+		int& tree_node_cnt,
+		const std::map<unsigned int, unsigned int>& duplicated_expr_ids,
+		std::vector<bool>& duplicated_expr_exported,
+		std::vector<std::string>& labels,
+		std::stringstream& out
+	) const = 0;
+
+	enum class ExpressionType {
+		kNegateOp,
+		kInverseOp,
+		kDeterminantOp,
+		kVectorizationOp,
+		kTransposeOp,
+		kDiagonalizeOp,
+		kSkewOp,
+		kExpOp,
+		kMatrixAdditionOp,
+		kMatrixProductOp,
+		kKroneckerProductOp,
+		kMatrixScalarPower,
+		kScalarMatrixProductOp,
+		kHadamardProductOp,
+		kIdentityMatrix,
+		kCommutationMatrix,
+		kDiagonalizationMatrix,
+		kSkewMatrix,
+		kElementMatrix,
+		kRationalScalarConstant,
+		kVariable
+	};
+
+public:
+	const unsigned int _uuid;
+	const int _priority;
+	const ExpressionType _type;
+
+	int _rows, _cols;           // for scalar expression, simply set these to (1, 1)
+	bool _has_variable;
+	bool _has_differential;
+
+protected:
+	Expression(
+		int priority,
+		const ExpressionType& type,
+		int rows, int cols,
+		bool has_variable,
+		bool has_differential
+	);
+	
 };
+
+namespace internal {
 
 /**
  * Leaf > single op > kron > prod = scalar prod > +
@@ -68,94 +198,6 @@ const int kScalarMatrixProductPriority  = 1;
 const int kHadamardProductPriority      = 2;
 const int kLeafPriority                 = 4;
 
-ExpressionPtr GetDotProduct(const ExpressionPtr lhs, const ExpressionPtr rhs);
-ExpressionPtr GetVector2Norm(const ExpressionPtr x);
-ExpressionPtr GetMultipleProduct(const std::vector<ExpressionPtr>& prods);
-ExpressionPtr GetMultipleAddition(const std::vector<ExpressionPtr>& adds);
-
-class Expression : public std::enable_shared_from_this<Expression> {
-public:
-	ExpressionPtr MarkVariable(unsigned int variable_id) const;
-	ExpressionPtr RealMarkVariable(unsigned int variable_id, std::map<unsigned int, ExpressionPtr>& marked_exprs) const;
-	virtual ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr>& marked_exprs) const = 0;
-
-	ExpressionPtr Differentiate();
-	ExpressionPtr RealDifferentiate(std::map<unsigned int, ExpressionPtr>& diffed_exprs);
-	virtual ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr>& diffed_exprs) = 0;
-
-	ExpressionPtr MarkDifferential();
-	ExpressionPtr RealMarkDifferential(std::map<unsigned int, ExpressionPtr>& marked_exprs);
-	virtual ExpressionPtr GetMarkedDifferentialExpression(std::map<unsigned int, ExpressionPtr>& marked_exprs) = 0;
-
-	ExpressionPtr Vectorize() const;
-	ExpressionPtr RealVectorize(std::map<unsigned int, ExpressionPtr>& veced_exprs) const;
-	virtual ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr>& veced_exprs) const = 0;
-
-	ExpressionPtr Substitute(const std::map<unsigned int, ExpressionPtr>& subs);
-	ExpressionPtr RealSubstitute(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs);
-	virtual ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs) = 0;
-
-	ExpressionPtr Simplify();
-	ExpressionPtr RealSimplify(std::map<unsigned int, ExpressionPtr>& simplified_exprs);
-	virtual ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr>& simplified_exprs) = 0;
-
-	std::string ExportGraph() const;
-
-	std::map<unsigned int, int> CountInDegree() const;
-	virtual void RealCountInDegree(
-		std::set<unsigned int>& visited,
-		std::map<unsigned int, int>& in_degrees
-	) const = 0;
-	virtual void CollectExpressionIds(std::vector<unsigned int>& ids) const = 0;
-	void RealExportGraph(
-		int& tree_cnt,
-		int cur_tree_id,
-		int &tree_node_cnt,
-		const std::map<unsigned int, unsigned int>& duplicated_expr_ids,
-		std::vector<bool>& duplicated_expr_exported,
-		std::vector<std::string>& labels,
-		std::stringstream& out
-	) const;
-	virtual void GetExportedGraph(
-		int& tree_cnt,
-		int cur_tree_id,
-		int& tree_node_cnt,
-		const std::map<unsigned int, unsigned int>& duplicated_expr_ids,
-		std::vector<bool>& duplicated_expr_exported,
-		std::vector<std::string>& labels,
-		std::stringstream& out
-	) const = 0;
-
-	virtual ExpressionPtr GetTransposedDerivative() const;
-
-	virtual void Print(std::ostream& out) const = 0;
-	virtual ExpressionPtr Clone() const = 0;
-
-
-#ifdef IMPLEMENT_SLOW_EVALUATION
-	virtual Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const = 0;
-#endif
-
-	virtual ~Expression() = default;
-
-	const unsigned int _uuid;
-	const int _priority;
-	const ExpressionType _type;
-
-	int _rows, _cols;           // for scalar expression, simply set these to (1, 1)
-	bool _has_variable;
-	bool _has_differential;
-
-	Expression(
-		int priority,
-		const ExpressionType& type,
-		int rows, int cols,
-		bool has_variable,
-		bool has_differential
-	);
-	
-};
-
 class SingleOpExpression : public Expression {
 public:
 	ExpressionPtr GetMarkedVariableExpression(unsigned int variable_id, std::map<unsigned int, ExpressionPtr> &marked_exprs) const override;
@@ -167,7 +209,6 @@ public:
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override = 0;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
 
-	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
 	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
 
 	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
@@ -410,7 +451,6 @@ public:
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override = 0;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override = 0;
 
-	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
 	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
 
 	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
@@ -565,7 +605,6 @@ public:
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
-	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
 	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
 
 	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
@@ -743,8 +782,6 @@ public:
 
 std::ostream& operator<<(std::ostream& out, const Expression& expr);
 
-namespace internal {
-
 class UUIDGenerator {
 public:
 	static unsigned int _cnt;
@@ -752,15 +789,5 @@ public:
 };
 
 }
-
-#ifdef IMPLEMENT_SLOW_EVALUATION
-
-Eigen::MatrixXd GetExpressionNumericDerivative(
-	const TMD::ExpressionPtr expression,
-	const TMD::VariableTable& table,
-	unsigned int variable_id
-);
-
-#endif
 
 }

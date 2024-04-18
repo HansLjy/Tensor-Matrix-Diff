@@ -12,110 +12,108 @@ int main() {
 	int variable_id = 0;
 	
 	// camera transformation
-	auto A = TMD::Variable::GetSelfType("A", variable_id++, 3, 3);
-	auto b = TMD::Variable::GetSelfType("b", variable_id++, 3, 1);
+	auto A = TMD::GetVariable("A", variable_id++, 3, 3);
+	auto b = TMD::GetVariable("b", variable_id++, 3, 1);
 
 	// Gaussian configuration
-	auto q = TMD::Variable::GetSelfType("q", variable_id++, 4, 1);
-	auto S = TMD::Variable::GetSelfType("S", variable_id++, 3, 3);
-	auto p = TMD::Variable::GetSelfType("p", variable_id++, 3, 1);
+	auto q = TMD::GetVariable("q", variable_id++, 4, 1);
+	auto S = TMD::GetVariable("S", variable_id++, 3, 3);
+	auto p = TMD::GetVariable("p", variable_id++, 3, 1);
 
 	// Other constant
-	auto gaussian_normalizer = TMD::Variable::GetSelfType("\\frac{1}{2 \\pi}", variable_id++, 1, 1);
+	auto gaussian_normalizer = TMD::GetVariable("\\frac{1}{2 \\pi}", variable_id++, 1, 1);
 
 	// Selection Matrices
-	auto Sv = TMD::Variable::GetSelfType("\\mathcal{S}_v", variable_id++, 3, 4);
-	auto Sq0 = TMD::Variable::GetSelfType("\\mathcal{S}_{q_0}", variable_id++, 1, 4);
-	auto Sx1 = TMD::Variable::GetSelfType("\\mathcal{S}_{x_1}", variable_id++, 1, 3);
-	auto Sx2 = TMD::Variable::GetSelfType("\\mathcal{S}_{x_2}", variable_id++, 1, 3);
-	auto Sx3 = TMD::Variable::GetSelfType("\\mathcal{S}_{x_3}", variable_id++, 1, 3);
-	auto S2d = TMD::Variable::GetSelfType("\\mathcal{S}_{2d}", variable_id++, 2, 3);
+	auto Sv = TMD::GetVariable("\\mathcal{S}_v", variable_id++, 3, 4);
+	auto Sq0 = TMD::GetVariable("\\mathcal{S}_{q_0}", variable_id++, 1, 4);
+	auto Sx1 = TMD::GetVariable("\\mathcal{S}_{x_1}", variable_id++, 1, 3);
+	auto Sx2 = TMD::GetVariable("\\mathcal{S}_{x_2}", variable_id++, 1, 3);
+	auto Sx3 = TMD::GetVariable("\\mathcal{S}_{x_3}", variable_id++, 1, 3);
+	auto S2d = TMD::GetVariable("\\mathcal{S}_{2d}", variable_id++, 2, 3);
 
 	// R related
-	auto v = TMD::MatrixProduct::GetSelfType(Sv, q);
-	auto skew_v = TMD::Skew::GetSelfType(v);
-	auto q0 = TMD::MatrixProduct::GetSelfType(Sq0, q);
+	auto v = TMD::GetProduct({Sv, q});
+	auto skew_v = TMD::GetSkew(v);
+	auto q0 = TMD::GetProduct({Sq0, q});
 
-	auto R = TMD::ScalarMatrixProduct::GetSelfType(
-		TMD::MatrixScalarPower::GetSelfType(
+	auto R = TMD::GetScalarProduct(
+		TMD::GetPower(
 			TMD::GetDotProduct(q, q),
-			TMD::RationalScalarConstant::GetSelfType(-1)
+			TMD::GetRationalScalarConstant(-1)
 		),
-		TMD::GetMultipleAddition({
-			TMD::MatrixProduct::GetSelfType(
-				v, TMD::Transpose::GetSelfType(v)
+		TMD::GetAddition({
+			TMD::GetProduct({
+				v, TMD::GetTranspose(v)
+			}),
+			TMD::GetScalarProduct(
+				TMD::GetProduct({
+					q0, TMD::GetTranspose(q0)
+				}),
+				TMD::GetIdeneityMatrix(3)
 			),
-			TMD::ScalarMatrixProduct::GetSelfType(
-				TMD::MatrixProduct::GetSelfType(
-					q0, TMD::Transpose::GetSelfType(q0)
-				),
-				TMD::IdentityMatrix::GetSelfType(3)
-			),
-			TMD::ScalarMatrixProduct::GetSelfType(
-				TMD::ScalarMatrixProduct::GetSelfType(
-					TMD::RationalScalarConstant::GetSelfType(2), q0
+			TMD::GetScalarProduct(
+				TMD::GetScalarProduct(
+					TMD::GetRationalScalarConstant(2), q0
 				),
 				skew_v
 			),
-			TMD::MatrixProduct::GetSelfType(
+			TMD::GetProduct({
 				skew_v, skew_v
-			)
+			})
 		})
 	);
 
 	// P related
-	auto x_of_P = TMD::Variable::GetSelfType("X", variable_id++, 3, 1);
-	auto x1 = TMD::MatrixProduct::GetSelfType(Sx1, x_of_P);
-	auto x2 = TMD::MatrixProduct::GetSelfType(Sx2, x_of_P);
-	auto x3 = TMD::MatrixProduct::GetSelfType(Sx2, x_of_P);
-	auto x3_inv = TMD::MatrixScalarPower::GetSelfType(x3, TMD::RationalScalarConstant::GetSelfType(-1));
+	auto x_of_P = TMD::GetVariable("X", variable_id++, 3, 1);
+	auto x1 = TMD::GetProduct({Sx1, x_of_P});
+	auto x2 = TMD::GetProduct({Sx2, x_of_P});
+	auto x3 = TMD::GetProduct({Sx2, x_of_P});
+	auto x3_inv = TMD::GetPower(x3, TMD::GetRationalScalarConstant(-1));
 
-	auto P = TMD::GetMultipleAddition({
-		TMD::ScalarMatrixProduct::GetSelfType(
-			TMD::ScalarMatrixProduct::GetSelfType(
+	auto P = TMD::GetAddition({
+		TMD::GetScalarProduct(
+			TMD::GetScalarProduct(
 				x1, x3_inv
 			),
-			TMD::ElementMatrix::GetSelfType(0, 0, 3, 1)
+			TMD::GetElementMatrix(0, 0, 3, 1)
 		),
-		TMD::ScalarMatrixProduct::GetSelfType(
-			TMD::ScalarMatrixProduct::GetSelfType(
+		TMD::GetScalarProduct(
+			TMD::GetScalarProduct(
 				x2, x3_inv
 			),
-			TMD::ElementMatrix::GetSelfType(1, 0, 3, 1)
+			TMD::GetElementMatrix(1, 0, 3, 1)
 		),
-		TMD::ScalarMatrixProduct::GetSelfType(
+		TMD::GetScalarProduct(
 			TMD::GetVector2Norm(x_of_P),
-			TMD::ElementMatrix::GetSelfType(2, 0, 3, 1)
+			TMD::GetElementMatrix(2, 0, 3, 1)
 		)
 	});
 	auto J = TMD::GetDerivative(P, x_of_P->_variable_id);
 
 	// gaussian related
-	auto x_of_gaussian = TMD::Variable::GetSelfType("x", variable_id++, 2, 1);
-	auto p_of_gaussian = TMD::Variable::GetSelfType("p", variable_id++, 2, 1);
-	auto V_of_gaussian = TMD::Variable::GetSelfType("V", variable_id++, 2, 2);
+	auto x_of_gaussian = TMD::GetVariable("x", variable_id++, 2, 1);
+	auto p_of_gaussian = TMD::GetVariable("p", variable_id++, 2, 1);
+	auto V_of_gaussian = TMD::GetVariable("V", variable_id++, 2, 2);
 
-	auto x_minus_p = TMD::MatrixAddition::GetSelfType(x_of_gaussian, TMD::Negate::GetSelfType(p_of_gaussian));
+	auto x_minus_p = TMD::GetMinus(x_of_gaussian, p_of_gaussian);
 
-	auto exp_part = TMD::Exp::GetSelfType(
-		TMD::ScalarMatrixProduct::GetSelfType(
-			TMD::RationalScalarConstant::GetSelfType(TMD::RationalScalarConstant::RationalNumber(-1, 2)),
-			TMD::GetMultipleProduct({
-				TMD::Transpose::GetSelfType(x_minus_p),
-				TMD::Inverse::GetSelfType(V_of_gaussian),
+	auto exp_part = TMD::GetExp(
+		TMD::GetScalarProduct(
+			TMD::GetRationalScalarConstant(-1, 2),
+			TMD::GetProduct({
+				TMD::GetTranspose(x_minus_p),
+				TMD::GetInverse(V_of_gaussian),
 				x_minus_p
 			})
 		)
 	);
 
-	auto mult_part = TMD::MatrixScalarPower::GetSelfType(
-		TMD::Determinant::GetSelfType(V_of_gaussian),
-		TMD::RationalScalarConstant::GetSelfType(
-			TMD::RationalScalarConstant::RationalNumber(-1, 2)
-		)
+	auto mult_part = TMD::GetScalarProduct(
+		TMD::GetDeterminant(V_of_gaussian),
+		TMD::GetRationalScalarConstant(-1, 2)
 	);
 
-	auto gaussian = TMD::MatrixProduct::GetSelfType(mult_part, exp_part);
+	auto gaussian = TMD::GetProduct({mult_part, exp_part});
 
 	auto gaussian_graph_str = TMD::GetDerivative(gaussian, V_of_gaussian->_variable_id)->ExportGraph();
 	std::ofstream gaussian_graph_file(fs::path(TEST_OUTPUT_DIR) / "gaussian.tex");
@@ -123,16 +121,16 @@ int main() {
 	gaussian_graph_file.close();
 
 	// finally!
-	auto Ap_plus_b = TMD::MatrixAddition::GetSelfType(
-		TMD::MatrixProduct::GetSelfType(A, p), b
-	);
+	auto Ap_plus_b = TMD::GetAddition({
+		TMD::GetProduct({A, p}), b
+	});
 	auto Jc = J->Substitute({{x_of_P->_variable_id, Ap_plus_b}});
-	auto SJARS = TMD::GetMultipleProduct({S2d, Jc, A, R, S});
-	auto Vi = TMD::MatrixProduct::GetSelfType(SJARS, TMD::Transpose::GetSelfType(SJARS));
-	auto pi = TMD::MatrixProduct::GetSelfType(S2d, P->Substitute({{x_of_P->_variable_id, Ap_plus_b}}));
+	auto SJARS = TMD::GetProduct({S2d, Jc, A, R, S});
+	auto Vi = TMD::GetProduct({SJARS, TMD::GetTranspose(SJARS)});
+	auto pi = TMD::GetProduct({S2d, P->Substitute({{x_of_P->_variable_id, Ap_plus_b}})});
 	
 	// variables
-	auto x = TMD::Variable::GetSelfType("x", variable_id++, 2, 1);
+	auto x = TMD::GetVariable("x", variable_id++, 2, 1);
 	auto alpha = gaussian->Substitute({
 		{x_of_gaussian->_variable_id, x},
 		{p_of_gaussian->_variable_id, pi},
