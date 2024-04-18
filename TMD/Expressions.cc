@@ -67,6 +67,13 @@ ExpressionPtr GetMultipleAddition(const std::vector<ExpressionPtr> &adds) {
 	return result;
 }
 
+std::map<unsigned int, int> Expression::CountInDegree() const {
+	std::map<unsigned int, int> in_degrees;
+	std::set<unsigned int> visited;
+	RealCountInDegree(visited, in_degrees);
+	return in_degrees;
+}
+
 std::string Expression::ExportGraph() const {
 	std::stringstream out;
 
@@ -78,25 +85,17 @@ std::string Expression::ExportGraph() const {
 	
 	out << "\\begin{document}" << std::endl;
 
-	std::vector<unsigned int> expr_ids;
-	CollectExpressionIds(expr_ids);
-	
 	std::map<unsigned int, unsigned int> duplicated_expr_ids;
-	int duplicated_id_cnt = 0;
-	std::sort(expr_ids.begin(), expr_ids.end());
-	for (int i = 0; i < expr_ids.size() - 1; ) {
-		if (expr_ids[i] == expr_ids[i + 1]) {
-			duplicated_expr_ids[expr_ids[i]] = duplicated_id_cnt++;
-			i++;
-			while (i < expr_ids.size() && expr_ids[i] == expr_ids[i - 1]) {
-				i++;
-			}
-		} else {
-			i++;
+	int duplicated_expr_cnt = 0;
+	
+	auto in_degrees = CountInDegree();
+	for (const auto [uuid, in_degree] : in_degrees) {
+		if (in_degree > 1) {
+			duplicated_expr_ids[uuid] = duplicated_expr_cnt++;
 		}
 	}
 
-	std::vector<bool> duplicated_expr_exported(duplicated_id_cnt, false);
+	std::vector<bool> duplicated_expr_exported(duplicated_expr_cnt, false);
 	std::vector<std::string> labels;
 
 	std::stringstream real_out;
@@ -297,6 +296,18 @@ void SingleOpExpression::GetExportedGraph(
 	out << "nd" << cur_tree_id << "_" << tree_node_cnt << "[label = label" << label_id << "]" << std::endl;
 	out << "nd" << cur_tree_id << "_" << tree_node_cnt << " -> " << "nd" << cur_tree_id << "_" << child_id << ";" << std::endl;
 	tree_node_cnt++;
+}
+
+void SingleOpExpression::RealCountInDegree(
+	std::set<unsigned int> &visited,
+	std::map<unsigned int, int> &in_degrees
+) const {
+	if (visited.find(_uuid) != visited.end()) {
+		return;
+	}
+	in_degrees[_child->_uuid]++;
+	visited.insert(_uuid);
+	_child->RealCountInDegree(visited, in_degrees);
 }
 
 ExpressionPtr Negate::GetSelfType(ExpressionPtr child) {
@@ -605,6 +616,20 @@ void DoubleOpExpression::CollectExpressionIds(std::vector<unsigned int> &ids) co
 	ids.push_back(_uuid);
 	_lhs->CollectExpressionIds(ids);
 	_rhs->CollectExpressionIds(ids);
+}
+
+void DoubleOpExpression::RealCountInDegree(
+	std::set<unsigned int> &visited,
+	std::map<unsigned int, int> &in_degrees
+) const {
+	if (visited.find(_uuid) != visited.end()) {
+		return;
+	}
+	visited.insert(_uuid);
+	in_degrees[_lhs->_uuid]++;
+	in_degrees[_rhs->_uuid]++;
+	_lhs->RealCountInDegree(visited, in_degrees);
+	_rhs->RealCountInDegree(visited, in_degrees);
 }
 
 void DoubleOpExpression::GetExportedGraph(
@@ -1074,6 +1099,14 @@ void LeafExpression::GetExportedGraph(
 	labels.push_back(cur_out.str());
 	out << "nd" << cur_tree_id << "_" << tree_node_cnt << "[label = label" << label_id << "]" << std::endl;
 	tree_node_cnt++;
+}
+
+void LeafExpression::RealCountInDegree(
+	std::set<unsigned int> &visited,
+	std::map<unsigned int, int> &in_degrees
+) const {
+	in_degrees[_uuid] = 0;
+	return;
 }
 
 ExpressionPtr LeafExpression::GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) const {

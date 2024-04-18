@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <map>
+#include <set>
 #include "TMDConfig.hpp"
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	#include "Eigen/Eigen"
@@ -95,6 +96,12 @@ public:
 	virtual ExpressionPtr GetSubedExpression(const std::map<unsigned int, ExpressionPtr>& subs, std::map<unsigned int, ExpressionPtr>& subed_exprs) = 0;
 
 	std::string ExportGraph() const;
+
+	std::map<unsigned int, int> CountInDegree() const;
+	virtual void RealCountInDegree(
+		std::set<unsigned int>& visited,
+		std::map<unsigned int, int>& in_degrees
+	) const = 0;
 	virtual void CollectExpressionIds(std::vector<unsigned int>& ids) const = 0;
 	void RealExportGraph(
 		int& tree_cnt,
@@ -158,6 +165,8 @@ public:
 
 	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
 	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
+
+	void RealCountInDegree(std::set<unsigned int> &visited, std::map<unsigned int, int> &in_degrees) const override;
 
 	virtual ExpressionPtr GetSingleOpExpression(ExpressionPtr child) const = 0;
 
@@ -398,6 +407,8 @@ public:
 
 	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
 	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
+
+	void RealCountInDegree(std::set<unsigned int> &visited, std::map<unsigned int, int> &in_degrees) const override;
 	
 	virtual ExpressionPtr GetDoubleOpExpression(ExpressionPtr lhs, ExpressionPtr rhs) const = 0;
 
@@ -546,6 +557,8 @@ public:
 
 	void CollectExpressionIds(std::vector<unsigned int> &ids) const override;
 	void GetExportedGraph(int &tree_cnt, int cur_tree_id, int &tree_node_cnt, const std::map<unsigned int, unsigned int> &duplicated_expr_ids, std::vector<bool> &duplicated_expr_exported, std::vector<std::string> &labels, std::stringstream &out) const override;
+
+	void RealCountInDegree(std::set<unsigned int> &visited, std::map<unsigned int, int> &in_degrees) const override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override = 0;
