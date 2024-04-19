@@ -1,3 +1,4 @@
+#include "MatrixManipulation.hpp"
 #define IMPLEMENT_SLOW_EVALUATION
 #include "Expressions.hpp"
 #include "FiniteDifference.hpp"
@@ -7,6 +8,74 @@
 #include <fstream>
 
 namespace fs = std::filesystem;
+const double PI = std::acos(-1);
+
+double Gaussian2D(
+	const Eigen::Matrix2d& V,
+	const Eigen::Vector2d& x,
+	const Eigen::Vector2d& p
+) {
+	double detV = V.determinant();
+	Eigen::Vector2d x_minus_p = x - p;
+	return 1.0 / (2 * PI) / std::sqrt(detV) * std::exp(-0.5 * x_minus_p.dot(V.inverse() * x_minus_p));
+}
+
+Eigen::Vector3d PerspectiveProject(
+	const Eigen::Vector3d& x
+) {
+	return (Eigen::Vector3d() << x(0) / x(2), x(1) / x(2), x.norm()).finished();
+}
+
+Eigen::Vector2d GetPi(
+	const Eigen::Matrix3d& A,
+	const Eigen::Vector3d& b,
+	const Eigen::Vector3d& p
+) {
+	Eigen::Vector3d pc = PerspectiveProject(A * p + b);
+	Eigen::Vector2d pi = pc.head<2>();
+	return pi;
+}
+
+Eigen::Matrix2d GetVi(
+	const Eigen::Matrix3d& J,
+	const Eigen::Matrix3d& A,
+	const Eigen::Matrix3d& R,
+	const Eigen::Matrix3d& S
+) {
+	Eigen::Matrix3d JARS = J * A * R * S;
+	Eigen::Matrix3d V = JARS * JARS.transpose();
+	Eigen::Matrix2d Vi = V.block<2, 2>(0, 0);
+	return Vi;
+}
+
+Eigen::Matrix3d GetR(
+	const Eigen::Vector4d& q
+) {
+	double q0 = q(0);
+	Eigen::Vector3d v = q.tail<3>();
+	Eigen::Matrix3d hat_v = Numerics::GetHatMatrix(v);
+	Eigen::Matrix3d R =
+		1.0 / q.squaredNorm() * (
+			v * v.transpose() + q0 * q0 * Eigen::Matrix3d::Identity() + 2 * q0 * hat_v + hat_v * hat_v
+		);
+	return R;
+}
+
+double Alpha(
+	const Eigen::Matrix3d& A,
+	const Eigen::Vector3d& b,
+	const Eigen::Vector2d& x,
+	const Eigen::Vector4d& q,
+	const Eigen::Matrix3d& S,
+	const Eigen::Vector3d& p,
+	const Eigen::Matrix3d& J
+) {
+	Eigen::Matrix3d R = GetR(q);
+	Eigen::Matrix2d Vi = GetVi(J, A, R, S);
+	Eigen::Vector2d pi = GetPi(A, b, p);
+
+	return Gaussian2D(Vi, x, pi);
+}
 
 int main() {
 	int variable_id = 0;
@@ -67,7 +136,7 @@ int main() {
 	auto x_of_P = TMD::GetVariable("X", variable_id++, 3, 1);
 	auto x1 = TMD::GetProduct({Sx1, x_of_P});
 	auto x2 = TMD::GetProduct({Sx2, x_of_P});
-	auto x3 = TMD::GetProduct({Sx2, x_of_P});
+	auto x3 = TMD::GetProduct({Sx3, x_of_P});
 	auto x3_inv = TMD::GetPower(x3, TMD::GetRationalScalarConstant(-1));
 
 	auto P = TMD::GetAddition({
@@ -88,7 +157,7 @@ int main() {
 			TMD::GetElementMatrix(2, 0, 3, 1)
 		)
 	});
-	auto J = TMD::GetDerivative(P, x_of_P->_variable_id);
+	auto J = TMD::GetTranspose(TMD::GetDerivative(P, x_of_P->_variable_id));
 
 	// gaussian related
 	auto x_of_gaussian = TMD::GetVariable("x", variable_id++, 2, 1);
@@ -108,10 +177,13 @@ int main() {
 		)
 	);
 
-	auto mult_part = TMD::GetScalarProduct(
-		TMD::GetDeterminant(V_of_gaussian),
-		TMD::GetRationalScalarConstant(-1, 2)
-	);
+	auto mult_part = TMD::GetProduct({
+		gaussian_normalizer,
+		TMD::GetPower(
+			TMD::GetDeterminant(V_of_gaussian),
+			TMD::GetRationalScalarConstant(-1, 2)
+		)
+	});
 
 	auto gaussian = TMD::GetProduct({mult_part, exp_part});
 
@@ -154,13 +226,37 @@ int main() {
 	table[q->_variable_id] = Eigen::MatrixXd::Random(4, 1);
 	table[S->_variable_id] = Eigen::MatrixXd::Random(3, 3);
 	table[p->_variable_id] = Eigen::MatrixXd::Random(3, 1);
-	table[Sv->_variable_id] = Eigen::MatrixXd::Random(3, 4);
-	table[Sq0->_variable_id] = Eigen::MatrixXd::Random(1, 4);
-	table[Sx1->_variable_id] = Eigen::MatrixXd::Random(1, 3);
-	table[Sx2->_variable_id] = Eigen::MatrixXd::Random(1, 3);
-	table[Sx3->_variable_id] = Eigen::MatrixXd::Random(1, 3);
-	table[S2d->_variable_id] = Eigen::MatrixXd::Random(2, 3);
+	table[gaussian_normalizer->_variable_id] = (Eigen::MatrixXd(1, 1) << 1.0 / (2 * PI)).finished();
+
+	table[Sv->_variable_id] = Eigen::MatrixXd::Zero(3, 4);
+	table[Sq0->_variable_id] = Eigen::MatrixXd::Zero(1, 4);
+	table[Sx1->_variable_id] = Eigen::MatrixXd::Zero(1, 3);
+	table[Sx2->_variable_id] = Eigen::MatrixXd::Zero(1, 3);
+	table[Sx3->_variable_id] = Eigen::MatrixXd::Zero(1, 3);
+	table[S2d->_variable_id] = Eigen::MatrixXd::Zero(2, 3);
+
+	table[Sv->_variable_id].rightCols<3>() = Eigen::Matrix3d::Identity();
+	table[Sq0->_variable_id](0, 0) = 1;
+	table[Sx1->_variable_id](0, 0) = 1;
+	table[Sx2->_variable_id](0, 1) = 1;
+	table[Sx3->_variable_id](0, 2) = 1;
+	table[S2d->_variable_id].leftCols<2>() = Eigen::Matrix2d::Identity();
+	
 	table[x->_variable_id] = Eigen::MatrixXd::Random(2, 1);
+
+	Eigen::Matrix3d J_matrix = Jc->SlowEvaluation(table);
+
+	double numeric_val = Alpha(
+		table[A->_variable_id],
+		table[b->_variable_id],
+		table[x->_variable_id],
+		table[q->_variable_id],
+		table[S->_variable_id],
+		table[p->_variable_id],
+		J_matrix
+	);
+	double analytic_val = alpha->SlowEvaluation(table)(0, 0);
+	std::cerr << numeric_val << " " << analytic_val << std::endl;
 
 	auto numeric_gradient = TMD::GetExpressionNumericDerivative(alpha, table, q->_variable_id);
 	auto analytic_gradient = alpha_gradient->SlowEvaluation(table);

@@ -135,7 +135,6 @@ ExpressionPtr GetRationalScalarConstant(int p, int q) {
 	return internal::RationalScalarConstant::GetSelfType(internal::RationalScalarConstant::RationalNumber(p, q));
 }
 
-
 ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variable) {
 	auto expr = expression;
 	expr = expr->MarkVariable(variable);
