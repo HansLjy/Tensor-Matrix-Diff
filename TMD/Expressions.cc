@@ -1,6 +1,9 @@
 #include "Expressions.hpp"
 #include <iostream>
 #include <cassert>
+#include <string>
+#include <sstream>
+#include <fstream>
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	#include "unsupported/Eigen/KroneckerProduct"
@@ -9,7 +12,6 @@
 #endif
 
 namespace TMD {
-
 
 ExpressionPtr GetNegate(const ExpressionPtr expr) {
 	return internal::Negate::GetSelfType(expr);
@@ -103,6 +105,17 @@ ExpressionPtr GetAddition(const std::vector<ExpressionPtr> &adds) {
 	return result;
 }
 
+ExpressionPtr GetKroneckerProduct(const std::vector<ExpressionPtr>& prods) {
+	if (prods.size() < 2) {
+		throw std::logic_error("not enough operands");
+	}
+	auto result = internal::KroneckerProduct::GetSelfType(prods[0], prods[1]);
+	for (unsigned int i = 2; i < prods.size(); i++) {
+		result = internal::KroneckerProduct::GetSelfType(result, prods[i]);
+	}
+	return result;
+}
+
 VariablePtr GetVariable(const std::string &name, unsigned int variable_id, int rows, int cols) {
 	return internal::Variable::GetSelfType(name, variable_id, rows, cols);
 }
@@ -123,8 +136,8 @@ ExpressionPtr GetSkewMatrix() {
 	return internal::SkewMatrix::GetSelfType();
 }
 
-ExpressionPtr GetElementMatrix(int element_row, int element_col, int rows, int cols) {
-	return internal::ElementMatrix::GetSelfType(element_row, element_col, rows, cols);
+ExpressionPtr GetSelectMatrix(int begin, int end, int total) {
+	return internal::SelectMatrix::GetSelfType(begin, end, total);
 }
 
 ExpressionPtr GetRationalScalarConstant(int n) {
@@ -148,6 +161,12 @@ ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variabl
 		expr->GetTransposedDerivative()
 	);
 	return result;
+}
+
+void ExportGraph(const ExpressionPtr expression, const fs::path& filepath) {
+	std::ofstream file(filepath);
+	file << expression->ExportGraph();
+	file.close();
 }
 
 
@@ -561,6 +580,19 @@ ExpressionPtr Vectorization::GetVecedExpression(std::map<unsigned int, Expressio
 	return _child->RealVectorize(veced_exprs);
 }
 
+ExpressionPtr Vectorization::GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) {
+	auto new_child = _child->RealSimplify(simplified_exprs);
+	if (new_child->_cols == 1) {
+		return new_child;
+	} else {
+		if (new_child != _child) {
+			return GetSelfType(new_child);
+		} else {
+			return shared_from_this();
+		}
+	}
+}
+
 ExpressionPtr Transpose::GetSelfType(ExpressionPtr child) {
 	return std::make_shared<Transpose>(
 		child->_cols, child->_rows,
@@ -613,6 +645,19 @@ ExpressionPtr Diagonalization::GetVecedExpression(std::map<unsigned int, Express
 		DiagonalizationMatrix::GetSelfType(_child->_rows),
 		_child->RealVectorize(veced_exprs)
 	);
+}
+
+ExpressionPtr Diagonalization::GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) {
+	auto new_child = _child->RealSimplify(simplified_exprs);
+	if (new_child->_rows == 1 && new_child->_cols == 1) {
+		return new_child;
+	} else {
+		if (new_child != _child) {
+			return GetSelfType(new_child);
+		} else {
+			return shared_from_this();
+		}
+	}
 }
 
 ExpressionPtr Diagonalization::GetSelfType(ExpressionPtr child) {
@@ -1314,19 +1359,16 @@ ExpressionPtr SkewMatrix::Clone() const {
 	return SkewMatrix::GetSelfType();
 }
 
-ExpressionPtr ElementMatrix::GetSelfType(int element_row, int element_col, int rows, int cols) {
-	if (element_row >= rows || element_col >= cols) {
-		throw std::logic_error("invalid element matrix");
-	}
-	return std::make_shared<ElementMatrix>(element_row, element_col, rows, cols);
+ExpressionPtr SelectMatrix::GetSelfType(int begin, int end, int total) {
+	return std::make_shared<SelectMatrix>(begin, end, total);
 }
 
-void ElementMatrix::Print(std::ostream &out) const {
-	out << "E_{" << _element_row << ", " << _element_col << "}^{" << _rows << ", " << _cols << "}";
+void SelectMatrix::Print(std::ostream &out) const {
+	out << "\\mathcal{S}^{" << _total << "}_{" << _begin << "-" << _end << "}";
 }
 
-ExpressionPtr ElementMatrix::Clone() const {
-	return GetSelfType(_element_row, _element_col, _rows, _cols);
+ExpressionPtr SelectMatrix::Clone() const {
+	return GetSelfType(_begin, _end, _total);
 }
 
 int gcd(int a, int b) {
@@ -1536,14 +1578,16 @@ Eigen::MatrixXd SkewMatrix::SlowEvaluation(const VariableTable &table) const {
 	return Numerics::GetVecHatMatrix();
 }
 
-Eigen::MatrixXd ElementMatrix::SlowEvaluation(const VariableTable &table) const {
-	Eigen::MatrixXd result = Eigen::MatrixXd::Zero(_rows, _cols);
-	result(_element_row, _element_col) = 1;
-	return result;
+Eigen::MatrixXd SelectMatrix::SlowEvaluation(const VariableTable &table) const {
+	return Eigen::MatrixXd::Identity(_total, _total).middleRows(_begin, _end - _begin);
 }
 
 Eigen::MatrixXd RationalScalarConstant::SlowEvaluation(const VariableTable& table) const {
 	return (Eigen::MatrixXd(1, 1) << static_cast<double>(_value)).finished();
+}
+
+Eigen::MatrixXd Variable::GetRandomMatrix() const {
+	return Eigen::MatrixXd::Random(_rows, _cols);
 }
 
 Eigen::MatrixXd Variable::SlowEvaluation(const VariableTable& table) const {

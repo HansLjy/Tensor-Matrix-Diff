@@ -4,10 +4,14 @@
 #include <string>
 #include <map>
 #include <set>
+#include <vector>
+#include <filesystem>
 #include "TMDConfig.hpp"
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	#include "Eigen/Eigen"
 #endif
+
+namespace fs = std::filesystem;
 
 namespace TMD {
 
@@ -48,6 +52,7 @@ ExpressionPtr GetVector2Norm(const ExpressionPtr x);
 // double op
 ExpressionPtr GetAddition(const std::vector<ExpressionPtr>& adds);
 ExpressionPtr GetProduct(const std::vector<ExpressionPtr>& prods);
+ExpressionPtr GetKroneckerProduct(const std::vector<ExpressionPtr>& prods);
 ExpressionPtr GetScalarProduct(const ExpressionPtr scalar, const ExpressionPtr matrix);
 ExpressionPtr GetPower(const ExpressionPtr matrix, const ExpressionPtr power);
 ExpressionPtr GetHadamardProduct(const ExpressionPtr lhs, const ExpressionPtr rhs);
@@ -61,12 +66,15 @@ ExpressionPtr GetIdeneityMatrix(int order);
 ExpressionPtr GetCommutationMatrix(int m, int n);
 ExpressionPtr GetDiagonalizationMatrix(int order);
 ExpressionPtr GetSkewMatrix();
-ExpressionPtr GetElementMatrix(int element_row, int element_col, int rows, int cols);
+ExpressionPtr GetSelectMatrix(int begin, int end, int total);
 ExpressionPtr GetRationalScalarConstant(int n);
 ExpressionPtr GetRationalScalarConstant(int p, int q);
 
 // taking derivatives
 ExpressionPtr GetDerivative(const ExpressionPtr expression, unsigned int variable);
+
+// exporting expression
+void ExportGraph(const ExpressionPtr expression, const fs::path& filepath);
 
 class Expression : public std::enable_shared_from_this<Expression> {
 public:
@@ -150,6 +158,7 @@ public:
 		kCommutationMatrix,
 		kDiagonalizationMatrix,
 		kSkewMatrix,
+		kSelectMatrix,
 		kElementMatrix,
 		kRationalScalarConstant,
 		kVariable
@@ -332,6 +341,8 @@ public:
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
 
+	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
+
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
 #endif
@@ -373,6 +384,8 @@ public:
 	ExpressionPtr Clone() const override;
 	ExpressionPtr GetDiffedExpression(std::map<unsigned int, ExpressionPtr> &diffed_exprs) override;
 	ExpressionPtr GetVecedExpression(std::map<unsigned int, ExpressionPtr> &veced_exprs) const override;
+
+	ExpressionPtr GetSimplifedExpression(std::map<unsigned int, ExpressionPtr> &simplified_exprs) override;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
@@ -696,24 +709,22 @@ public:
 	static ExpressionPtr GetSelfType();
 };
 
-class ElementMatrix : public LeafExpression {
+class SelectMatrix : public LeafExpression {
 public:
-	ElementMatrix(
-		int element_row, int element_col,
-		int rows, int cols):
-		LeafExpression(ExpressionType::kElementMatrix, rows, cols, false, false),
-		_element_row(element_row), _element_col(element_col) {}
-	
+	SelectMatrix(int begin, int end, int total):
+		LeafExpression(ExpressionType::kSelectMatrix, end - begin, total, false, false),
+		_begin(begin), _end(end), _total(total) {}
+
 	void Print(std::ostream &out) const override;
 	ExpressionPtr Clone() const override;
 
-	int _element_row, _element_col;
+	int _begin, _end, _total;
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable &table) const override;
 #endif
 
-	static ExpressionPtr GetSelfType(int element_row, int element_col, int rows, int cols);
+	static ExpressionPtr GetSelfType(int begin, int end, int total);
 };
 
 class RationalScalarConstant : public LeafExpression {
@@ -772,6 +783,7 @@ public:
 
 #ifdef IMPLEMENT_SLOW_EVALUATION
 	Eigen::MatrixXd SlowEvaluation(const VariableTable& table) const override;
+	Eigen::MatrixXd GetRandomMatrix() const;
 #endif
 
 	static std::shared_ptr<Variable> GetSelfType(const std::string& name, unsigned int variable_id, int rows, int cols);
