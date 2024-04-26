@@ -4,6 +4,10 @@
 
 TMD is mainly inspired by a series of Zhihu articles([1st episode](https://zhuanlan.zhihu.com/p/24709748) and [2nd episode](https://zhuanlan.zhihu.com/p/24863977)). We thank the [author](https://www.zhihu.com/people/chang-qu-gui-xia) for his/her great introduction to matrix differentiation.
 
+Here is an example result: the partial derivative of 2D gaussian function to the variance:
+
+![derivative](assets/pFpV.png)
+
 ## TODO
 
 Much is still under construction for TMD:
