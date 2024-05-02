@@ -13,5 +13,5 @@ message(STATUS ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(TMD PUBLIC Eigen3::Eigen)
 
 if (IMPLEMENT_SLOW_EVALUATION)
-	target_link_libraries(TMD PUBLIC Numerics)
+	target_link_libraries(TMD PRIVATE Numerics)
 endif()
