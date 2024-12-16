@@ -16,7 +16,7 @@ target_link_options(
 	"$<$<CONFIG:DEBUG>:-g>"
 )
 
-if (BUILD_TEST)
+if (BUILD_TEST OR BUILD_EXAMPLE)
 	set(IMPLEMENT_SLOW_EVALUATION true)
 endif()
 
@@ -25,4 +25,8 @@ add_subdirectory(TMD)
 
 if (BUILD_TEST)
 	add_subdirectory(test)
+endif()
+
+if (BUILD_EXAMPLE)
+	add_subdirectory(examples)
 endif()

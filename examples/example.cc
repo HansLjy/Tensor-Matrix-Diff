@@ -2,7 +2,7 @@
 #define IMPLEMENT_SLOW_EVALUATION
 #include "Expressions.hpp"
 #include "FiniteDifference.hpp"
-#include "TestConfig.hpp"
+#include "ExampleConfig.hpp"
 #include <iostream>
 #include <filesystem>
 #include <fstream>
@@ -188,7 +188,7 @@ int main() {
 	auto gaussian = TMD::GetProduct({mult_part, exp_part});
 
 	auto gaussian_graph_str = TMD::GetDerivative(gaussian, V_of_gaussian->_variable_id)->ExportGraph();
-	std::ofstream gaussian_graph_file(fs::path(TEST_OUTPUT_DIR) / "gaussian.tex");
+	std::ofstream gaussian_graph_file(fs::path(EXAMPLE_OUTPUT_DIR) / "gaussian.tex");
 	gaussian_graph_file << gaussian_graph_str;
 	gaussian_graph_file.close();
 
@@ -210,13 +210,13 @@ int main() {
 	});
 
 	auto alpha_graph_str = alpha->ExportGraph();
-	std::ofstream alpha_graph_file(fs::path(TEST_OUTPUT_DIR) / "alpha.tex");
+	std::ofstream alpha_graph_file(fs::path(EXAMPLE_OUTPUT_DIR) / "alpha.tex");
 	alpha_graph_file << alpha_graph_str;
 	alpha_graph_file.close();
 
 	auto alpha_gradient = TMD::GetDerivative(alpha, q->_variable_id)->Simplify();
 	auto alpha_gradient_graph_str = alpha_gradient->ExportGraph();
-	std::ofstream alpha_gradient_file(fs::path(TEST_OUTPUT_DIR) / "alpha-gradient.tex");
+	std::ofstream alpha_gradient_file(fs::path(EXAMPLE_OUTPUT_DIR) / "alpha-gradient.tex");
 	alpha_gradient_file << alpha_gradient_graph_str;
 	alpha_gradient_file.close();
 
@@ -262,10 +262,10 @@ int main() {
 	auto analytic_gradient = alpha_gradient->SlowEvaluation(table);
 	std::cerr << numeric_gradient.transpose() << std::endl
 			  << analytic_gradient.transpose() << std::endl;
-	
+
 	auto alpha_hessian = TMD::GetDerivative(alpha_gradient, q->_variable_id)->Simplify();
 	auto alpha_hessian_graph_str = alpha_hessian->ExportGraph();
-	std::ofstream alpha_hessian_file(fs::path(TEST_OUTPUT_DIR) / "alpha-hessian.tex");
+	std::ofstream alpha_hessian_file(fs::path(EXAMPLE_OUTPUT_DIR) / "alpha-hessian.tex");
 	alpha_hessian_file << alpha_hessian_graph_str;
 	alpha_hessian_file.close();
 
