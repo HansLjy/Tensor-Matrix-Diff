@@ -709,10 +709,11 @@ public:
 	static ExpressionPtr GetSelfType();
 };
 
+// Right multiply it to select columns
 class SelectMatrix : public LeafExpression {
 public:
 	SelectMatrix(int begin, int end, int total):
-		LeafExpression(ExpressionType::kSelectMatrix, end - begin, total, false, false),
+		LeafExpression(ExpressionType::kSelectMatrix, total, end - begin, false, false),
 		_begin(begin), _end(end), _total(total) {}
 
 	void Print(std::ostream &out) const override;

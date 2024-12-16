@@ -1364,7 +1364,7 @@ ExpressionPtr SelectMatrix::GetSelfType(int begin, int end, int total) {
 }
 
 void SelectMatrix::Print(std::ostream &out) const {
-	out << "\\mathcal{S}^{" << _total << "}_{" << _begin << "-" << _end << "}";
+	out << "\\mathcal{S}^{" << _total << "}_{[" << _begin << ", " << _end << ")}";
 }
 
 ExpressionPtr SelectMatrix::Clone() const {
@@ -1579,7 +1579,7 @@ Eigen::MatrixXd SkewMatrix::SlowEvaluation(const VariableTable &table) const {
 }
 
 Eigen::MatrixXd SelectMatrix::SlowEvaluation(const VariableTable &table) const {
-	return Eigen::MatrixXd::Identity(_total, _total).middleRows(_begin, _end - _begin);
+	return Eigen::MatrixXd::Identity(_total, _total).middleCols(_begin, _end - _begin);
 }
 
 Eigen::MatrixXd RationalScalarConstant::SlowEvaluation(const VariableTable& table) const {

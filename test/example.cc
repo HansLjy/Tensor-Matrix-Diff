@@ -144,17 +144,17 @@ int main() {
 			TMD::GetScalarProduct(
 				x1, x3_inv
 			),
-			TMD::GetElementMatrix(0, 0, 3, 1)
+			TMD::GetSelectMatrix(0, 1, 3)
 		),
 		TMD::GetScalarProduct(
 			TMD::GetScalarProduct(
 				x2, x3_inv
 			),
-			TMD::GetElementMatrix(1, 0, 3, 1)
+			TMD::GetSelectMatrix(1, 2, 3)
 		),
 		TMD::GetScalarProduct(
 			TMD::GetVector2Norm(x_of_P),
-			TMD::GetElementMatrix(2, 0, 3, 1)
+			TMD::GetSelectMatrix(2, 3, 3)
 		)
 	});
 	auto J = TMD::GetTranspose(TMD::GetDerivative(P, x_of_P->_variable_id));

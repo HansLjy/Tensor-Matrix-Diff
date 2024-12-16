@@ -16,6 +16,10 @@ target_link_options(
 	"$<$<CONFIG:DEBUG>:-g>"
 )
 
+if (BUILD_TEST)
+	set(IMPLEMENT_SLOW_EVALUATION true)
+endif()
+
 add_subdirectory(3rdParty)
 add_subdirectory(TMD)
 

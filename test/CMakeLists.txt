@@ -17,5 +17,5 @@ target_link_libraries(test PRIVATE Numerics)
 target_include_directories(test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 add_executable(example example.cc)
-target_link_libraries(example PRIVATE TMD)
+target_link_libraries(example PRIVATE TMD Numerics)
 target_include_directories(example PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
