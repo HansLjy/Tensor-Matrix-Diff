@@ -53,6 +53,10 @@ double Gaussian(
 }
 
 int main(int argc, const char* argv[]) {
+	if (!fs::exists(EXAMPLE_OUTPUT_DIR)) {
+		fs::create_directory(EXAMPLE_OUTPUT_DIR);
+	}
+
 	const int dim = atoi(argv[1]);
 
 	// definitions

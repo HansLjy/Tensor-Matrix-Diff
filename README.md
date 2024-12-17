@@ -6,4 +6,22 @@ TMD is mainly inspired by a series of Zhihu articles([1st episode](https://zhuan
 
 Here is an example result: the partial derivative of 2D gaussian function to the variance:
 
-![derivative](assets/pFpV.png)
+![derivative](assets/gaussian_gradient.png)
+
+## Integration
+
+The project export a cmake target `TMD`. To enable slow evaluation of the expression type, set `IMPLEMENT_SLOW_EVALUATION` to `true` before adding our project.
+
+## Example
+
+One example can be found in `examples/gaussian.cc`. To build the example:
+
+```shell
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLE=true
+make -j4
+./examples/gaussian 2 # The parameter is the dimension of the normal distribution
+```
+
+The example outputs will be placed in `examples/outputs`. There will be two files: `gaussian.tex` and `gaussian_gradient.tex`. Compile them to obtain the graphic views of the two expressions.
